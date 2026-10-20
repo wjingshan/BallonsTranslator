@@ -19,6 +19,20 @@
    ```
    message 用英文（将来可能直接提交给作者）。
 5. 在本目录新增 `NNNN-<slug>.md`，并在 `INDEX.md` 登记一行。
+6. 若该改动将来要进上游：把它合入 `upstream-pr` 分支并重新导出补丁
+   （见 `0004-upstream-pr-bundle.md`）。
+
+## 发送策略
+
+**不单独发送，攒齐后一次性发给作者。** 因此：
+
+- 每次有新改动落地，`upstream-pr` 与导出包就落后一截；发送前必须重建并验证。
+- 发送前跑一条命令确认包没腐坏：
+  ```bash
+  python docs/local-changes/verify-upstream-bundle.py
+  ```
+  退出码非 0 会列出「分支落后 / 补丁过期 / 数量不匹配」的具体问题。
+- `docs/local-changes/` 永不进入补丁；补丁只含 `ballontranslator/`、`doc/`、`tests/`。
 
 ## 文件命名
 
