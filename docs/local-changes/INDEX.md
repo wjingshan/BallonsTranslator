@@ -9,5 +9,6 @@
 | 0005 | 2026-10-20 | 修复：勾选整词旋转后竖排几何不更新 | 已验证 | 适合 | [0005-roman-rotation-cache-invalidation.md](0005-roman-rotation-cache-invalidation.md) |
 | 0006 | 2026-10-20 | 面板未绑定时，两个排版选项作用于整页 | 已验证 | 需改造 | [0006-page-wide-layout-options.md](0006-page-wide-layout-options.md) |
 | 0007 | 2026-10-20 | 批量「运行」时自动应用两个版面选项 | 已验证 | 需改造 | [0007-pipeline-layout-options.md](0007-pipeline-layout-options.md) |
+| 0008 | 2026-10-20 | 收尾四条：控件本地化、整词不跨列、省略号、连续标点 | 已验证 | 需改造 | [0008-finishing-touches.md](0008-finishing-touches.md) |
 
 说明：状态取值 `验证中` / `已验证` / `已回滚`；上游可提交性取值 `适合` / `需改造` / `不适合` / `—`。
