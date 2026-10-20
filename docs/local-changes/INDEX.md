@@ -5,5 +5,6 @@
 | 0001 | 2026-10-20 | 安装 v1.5.20 基线并建立 git 记录 | 已验证 | — | [0001-install-baseline.md](0001-install-baseline.md) |
 | 0002 | 2026-10-20 | 文字框内垂直对齐（顶/中/底） | 已验证 | 需改造 | [0002-frame-vertical-alignment.md](0002-frame-vertical-alignment.md) |
 | 0003 | 2026-10-20 | 竖排西文整词旋转（紧凑） | 已验证 | 需改造 | [0003-roman-word-rotation.md](0003-roman-word-rotation.md) |
+| 0004 | 2026-10-20 | 上游提 PR 用的干净改动包 | 已验证 | — | [0004-upstream-pr-bundle.md](0004-upstream-pr-bundle.md) |
 
 说明：状态取值 `验证中` / `已验证` / `已回滚`；上游可提交性取值 `适合` / `需改造` / `不适合` / `—`。
