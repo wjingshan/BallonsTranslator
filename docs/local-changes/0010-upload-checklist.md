@@ -21,7 +21,7 @@
 ```bash
 # 1. 在 GitHub 上 fork dmMaze/BallonsTranslator，然后：
 cd H:\BallonsTranslator
-git remote add myfork https://github.com/<你的用户名>/BallonsTranslator.git
+git remote add myfork https://github.com/wjingshan/BallonsTranslator.git   # 已创建并推送
 
 # 2a. 想按 33 个提交评审：
 git push myfork upstream-pr:vertical-layout-and-canvas-controls
@@ -46,7 +46,7 @@ git push myfork pr-squash:vertical-layout-and-canvas-controls
 - [x] 真机验证记录见 `PR.md` 的表格（探图、整页适配、自由换行、缩放支点、Shift 整页）
 - [x] `PR.md` 已按最终形态重写（功能分组、行为说明、验证数据、待决问题）
 - [ ] 用户 fork 已创建并配置 `myfork` 远端
-- [ ] 选择 33 提交或单提交形态推送
+- [x] 已推送 33 提交形态：分支 ertical-layout-and-canvas-controls
 - [ ] 开 PR 并粘贴 `PR.md` 正文
 
 ## 上传后建议
