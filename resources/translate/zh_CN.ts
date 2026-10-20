@@ -1085,6 +1085,16 @@
         <source>Codex</source>
         <translation>Codex</translation>
     </message>
+    <message>
+        <location filename="../../ballontranslator/ui/configpanel.py" line="1022"/>
+        <source>Rotate Roman Words</source>
+        <translation>西文整词旋转</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/configpanel.py" line="1025"/>
+        <source>Vertical Align</source>
+        <translation>垂直对齐</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
@@ -6116,6 +6126,45 @@ Then restart Photoshop. Explorer will now open the source file and destination l
     <message>
         <source>Shadow</source>
         <translation type="vanished">阴影</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="281"/>
+        <source>Vertical Align</source>
+        <translation>垂直对齐</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="270"/>
+        <source>Auto</source>
+        <translation>自动</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="231"/>
+        <source>Top</source>
+        <translation>顶部</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="272"/>
+        <source>Centre</source>
+        <translation>居中</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="31"/>
+        <source>Bottom</source>
+        <translation>底部</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="293"/>
+        <source>Rotate Roman Words</source>
+        <translation>西文整词旋转</translation>
+    </message>
+    <message>
+        <location filename="../../ballontranslator/ui/text_engine/formatting/advanced.py" line="267"/>
+        <source>Place the settled text at the top, centre, or bottom of its box</source>
+        <translation>把排好的文字放在文字框的顶部、居中或底部</translation>
+    </message>
+    <message>
+        <source>Vertical layout only: rotate Latin letters as one compact run instead of standing each letter in its own full-width cell</source>
+        <translation>仅竖排生效：把西文单词整体旋转、按真实字宽紧凑排列，不再让每个字母各占一个全角格</translation>
     </message>
 </context>
 <context>

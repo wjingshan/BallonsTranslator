@@ -40,24 +40,6 @@ from ..annotations import (
     OLDSTYLE_NUMS,
 )
 
-def _localized(source: str, translated: str, chinese: str) -> str:
-    """Use the Chinese wording while the catalogue has no entry for ``source``.
-
-    Rebuilding the shipped ``.qm`` catalogues needs Qt's lrelease, which this
-    environment does not ship, so a new string that is not translated yet would
-    show English inside an otherwise Chinese UI. An existing catalogue entry
-    always wins, and the display language decides whether the fallback applies.
-    """
-    from ballontranslator.utils import config as C
-
-    if (
-        translated == source
-        and str(getattr(C.pcfg, 'display_lang', '')).startswith('zh')
-    ):
-        return chinese
-    return translated
-
-
 def _word_wrap_label(label: QLabel):
     label.setWordWrap(True)
     label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -285,16 +267,10 @@ class TextAdvancedFormatPanel(PanelArea):
             'Place the settled text at the top, centre, or bottom of its box'
         ))
         for option, value in (
-            (_localized('Auto', self.tr('Auto'), '自动'), TextVerticalAlignment.Auto),
-            (_localized('Top', self.tr('Top'), '顶部'), TextVerticalAlignment.Top),
-            (
-                _localized('Centre', self.tr('Centre'), '居中'),
-                TextVerticalAlignment.Center,
-            ),
-            (
-                _localized('Bottom', self.tr('Bottom'), '底部'),
-                TextVerticalAlignment.Bottom,
-            ),
+            (self.tr('Auto'), TextVerticalAlignment.Auto),
+            (self.tr('Top'), TextVerticalAlignment.Top),
+            (self.tr('Centre'), TextVerticalAlignment.Center),
+            (self.tr('Bottom'), TextVerticalAlignment.Bottom),
         ):
             self.vertical_alignment_combobox.addItem(option, int(value))
         self.vertical_alignment_combobox.activated.connect(
@@ -302,11 +278,7 @@ class TextAdvancedFormatPanel(PanelArea):
         )
         self.vertical_alignment_label = _word_wrap_label(
             SmallParamLabel(
-                _localized(
-                    'Vertical Align',
-                    self.tr('Vertical Align'),
-                    '垂直对齐',
-                ),
+                self.tr('Vertical Align'),
                 parent=self.top_section,
             )
         )
@@ -318,11 +290,7 @@ class TextAdvancedFormatPanel(PanelArea):
 
         self.roman_word_rotation_label = _word_wrap_label(
             SmallParamLabel(
-                _localized(
-                    'Rotate Roman Words',
-                    self.tr('Rotate Roman Words'),
-                    '西文整词旋转',
-                ),
+                self.tr('Rotate Roman Words'),
                 parent=self.top_section,
             )
         )
@@ -330,16 +298,9 @@ class TextAdvancedFormatPanel(PanelArea):
         self.roman_word_rotation_checkbox.setObjectName(
             'TextAdvancedFormatCheckbox'
         )
-        self.roman_word_rotation_checkbox.setToolTip(_localized(
+        self.roman_word_rotation_checkbox.setToolTip(self.tr(
             'Vertical layout only: rotate Latin letters as one compact run '
-            'instead of standing each letter in its own full-width cell',
-            self.tr(
-                'Vertical layout only: rotate Latin letters as one compact '
-                'run instead of standing each letter in its own full-width '
-                'cell'
-            ),
-            '仅竖排生效：把西文单词整体旋转、按真实字宽紧凑排列，'
-            '不再让每个字母各占一个全角格',
+            'instead of standing each letter in its own full-width cell'
         ))
         self.roman_word_rotation_checkbox.toggled.connect(
             self.on_roman_word_rotation_toggled
