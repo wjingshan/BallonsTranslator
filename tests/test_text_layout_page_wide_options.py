@@ -70,6 +70,7 @@ class _PanelShim:
 
     PAGE_WIDE_PARAMS = FontFormatPanel.PAGE_WIDE_PARAMS
     page_text_items = FontFormatPanel.page_text_items
+    _apply_page_wide_option = FontFormatPanel._apply_page_wide_option
     on_param_changed = FontFormatPanel.on_param_changed
 
     def __init__(self, global_format: FontFormat, is_global: bool) -> None:
@@ -93,6 +94,8 @@ class PageWideOptionTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.scene = QGraphicsScene()
+        # Kept on the instance: a scene collected mid-test destroys its items.
+        self.empty_scene = QGraphicsScene()
         self.items = [make_item(0), make_item(1, vertical=False)]
         for item in self.items:
             self.scene.addItem(item)
@@ -109,6 +112,7 @@ class PageWideOptionTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._active_patch.stop()
         self._canvas_patch.stop()
+        self.empty_scene.clear()
         self.scene.clear()
 
     def test_page_text_items_lists_the_whole_page_in_order(self) -> None:
@@ -116,6 +120,50 @@ class PageWideOptionTest(unittest.TestCase):
         self.assertEqual(
             [item.idx for item in panel.page_text_items()], [0, 1]
         )
+
+    def test_page_items_come_from_the_scene_manager_not_the_scene(self) -> None:
+        """The app's canvas scene holds no TextBlkItem; the manager owns them.
+
+        This is the regression for the page-wide change doing nothing: the
+        scene contained only block handles, so a scene walk found no targets.
+        """
+        from ballontranslator.ui import shared_widget as SW
+
+        class _Manager:
+            def __init__(self, items):
+                self.textblk_item_list = items
+
+        # The app's canvas scene exposes no TextBlkItem (only block handles),
+        # so point the view at an empty scene and keep the items alive.
+        self.canvas.gv = _View(self.empty_scene)
+        with patch.object(
+            SW, 'st_manager', _Manager(self.items), create=True
+        ):
+            panel = _PanelShim(FontFormat(), is_global=False)
+            self.assertEqual(
+                [item.idx for item in panel.page_text_items()], [0, 1]
+            )
+            panel.on_param_changed('roman_word_rotation', True)
+        for item in self.items:
+            with self.subTest(idx=item.idx):
+                self.assertTrue(item.fontformat.roman_word_rotation)
+
+    def test_page_items_fall_back_to_the_canvas_text_layer(self) -> None:
+        from ballontranslator.ui import shared_widget as SW
+
+        # Detach from the original scene first: reparenting across scenes
+        # corrupts Qt's item bookkeeping.
+        for item in self.items:
+            self.scene.removeItem(item)
+        layer = self.empty_scene.addRect(0, 0, 1, 1)
+        for item in self.items:
+            item.setParentItem(layer)
+        self.canvas.textLayer = layer
+        with patch.object(SW, 'st_manager', None, create=True):
+            panel = _PanelShim(FontFormat(), is_global=False)
+            self.assertEqual(
+                [item.idx for item in panel.page_text_items()], [0, 1]
+            )
 
     def test_unbound_rotation_reaches_every_page_block(self) -> None:
         panel = _PanelShim(FontFormat(), is_global=False)

@@ -1,67 +1,82 @@
 # 0006 面板未绑定时，两个排版选项作用于整页
 
 - 日期：2026-10-20
-- 状态：已验证
+- 状态：已验证（在真实主窗口中端到端验证）
 - 相关提交：`feat(ui): apply vertical anchor and Roman rotation to the page when unbound`
 
 ## 现象
 
-用户在「进阶字体格式」面板勾选 `Rotate Roman Words`，界面显示已勾选，画布上的英文毫无变化。
-连续三轮都是这个结果。
+勾选 `Rotate Roman Words` 后界面显示已勾选，画布上的英文毫无变化，连续多轮如此。
 
-## 根因（面板绑的是默认值，不是块）
+## 排查：三次错误假设，最后靠现场诊断定案
 
-`FormatPanel` 启动时 `C.active_format = self.global_format`，即面板默认绑在**全局格式**上。
-此时改任何参数：
+| 假设 | 验证方式 | 结论 |
+| --- | --- | --- |
+| 旧代码没加载 | 进程启动时间 vs 提交时间、config 里是否出现新字段 | 否，新代码在跑 |
+| 竖排列几何缓存没失效 | 真实字体下测 `m` 推进，去掉缓存键变量复测 | 确有该 bug（见 0005），但不是本次现象的原因 |
+| 勾选没落到块上 | 读项目 JSON：该页块 `roman_word_rotation` 为 `null` | 成立，但只是现象 |
 
-- 全局模式 → 写进 `pcfg.global_fontformat`，只影响**以后新建**的块；
-- 已存在的块从不继承这个默认值（流水线只对带 `let_*` 开关的属性覆写全局值，
-  而这两个新字段没有这样的开关）。
+定案靠一个临时诊断文件（`logs/_layout_diag.txt`，git 忽略），在用户点击那一刻记录现场：
 
-于是「勾上了」和「画布变了」是两件事。用户的截图里有直接证据：面板底部字号显示 **27**
-（= 全局格式），而该页文字块的字号是 **57 / 65.5 / 59.3**；项目文件里那页 8 个块的
-`roman_word_rotation` 全是 `null`。
+```
+manager=SceneTextManager owned=0          ← 当前页文字块列表为空
+textLayer=QGraphicsPixmapItem             ← 文字层是位图，无子项
+scene_kinds={... 'ControlBlockItem': 8, ...}  ← 只有缩放手柄，没有 TextBlkItem
+page_items=0
+```
 
-另外，面板在没有绑定块时仍会把 `textblk_item=None` 交给命令，得到 `blkitems=[None]`，
-在 `setRomanWordRotation` 上抛 `AttributeError`——界面勾上了、数据没动、还留一条异常。
-这是上游既有行为（所有参数一致），本次一并绕开。
+即那次会话里**当前页一个可编辑文字块都没有**，任何格式改动都不可能有可见效果。
 
-## 设计取舍
+同时暴露了我第一版实现的两个真实缺陷：
 
-- 只对**两个描述版面的参数**（`vertical_alignment`、`roman_word_rotation`）启用新行为，
-  用户已确认要「作用到当前页所有文字块」。字号、字重、颜色等**不**受影响——
-  否则一次误操作会把整页排版刷掉。
-- 目标解析顺序：**有选中块 → 只作用于选中块；没有 → 作用于当前页所有文字块**。
-- 处于全局模式时，同一次操作**同时**更新默认值（供以后新建块使用），但只推一条撤销命令，
-  避免一次点击产生两步。
-- 目标顺序按 `item.idx` 排序，不依赖场景遍历顺序。
+1. `page_text_items()` 只遍历 `scene.items()` 找 `TextBlkItem`。真实布局里文字块是
+   `canvas.textLayer`（`QGraphicsPixmapItem`）的子项、由
+   `SceneTextManager.textblk_item_list` 持有；场景遍历未必找得到。
+2. 面板残留的绑定块若不属于当前页，会把整页改动吞掉。
 
-## 改动
+## 修复
 
-| 文件 | 改动 |
-| --- | --- |
-| `formatting/panel.py` | `PAGE_WIDE_PARAMS`、`page_text_items()`、`on_param_changed()` 的目标解析 |
-| `tests/test_text_layout_page_wide_options.py` | 6 个用例 |
+`page_text_items()` 按可靠性三级取：
 
-## 验证
+1. `SW.st_manager.textblk_item_list`（当前页权威列表，按 idx 顺序）
+2. `canvas.textLayer` 的子项
+3. 最后才退回场景遍历
 
-- 新增 6 例全部通过：整页枚举顺序、勾选作用于整页、锚点作用于整页、
-  全局模式同时更新默认值、**显式选中不被扩大**到整页、其他参数保持原绑定不被误扩大。
-- 三个新套件合计 **37 例通过**。
-- 既有回归：5 套 28 例（3 个既有失败）、`test_vertical_roman_alignment` 36 例
-  （7 个既有失败），与本改动前基线一致。
-- 面板 `py_compile` 与 doctest（3 例）通过。
+`_apply_page_wide_option()` 另外做三件事：
 
-### 未验证
+- 绑定的块若不在当前页列表里 → 视为无绑定，退回整页；
+- 处于全局模式时同时更新默认值（供以后新建块使用），但只推一条撤销命令；
+- 整段用 `try/except` + `LOGGER.exception` 包住：UI 槽里静默失败正是「界面勾上了、
+  画布没动」的温床。
 
-- 没有在运行中的程序里真机点过（需重启加载）。测试用真实 `TextBlkItem` + 真实
-  `QGraphicsScene`，但面板对象是最小外壳（`FontFormatPanel` 需要整窗才能构造），
-  被验证的是**目标解析这条决策逻辑**本身。
-- 真机上「点一下气泡里的文字块后，面板是否自动切换为该块的格式」未验证，
-  这决定「有选中块」分支在实机上是否真的会被走到。
+## 端到端验证（这次真的在程序里跑）
+
+写了驱动脚本：用 `--proj-dir` 打开用户的 `input/H漫画 同人志/(C91)` 项目，构造
+**真实 MainWindow**，在事件循环里执行检查，最后把画布渲染成 PNG 再退出。
+
+- 离屏运行（无字体）确认数据链路：`manager owned=8`、场景 `TextBlkItem=8`；面板在
+  **全局模式、未选中块**时执行 `on_param_changed('roman_word_rotation', True)`
+  → 目标块 `rot: False → True`、`needs_vertical_rotation('m')=True`。
+- 真实字体运行（默认平台）渲染画布并裁切目标气泡：`master` 侧躺紧凑，中文与标点不动。
+  这是本功能第一次由真实主窗口证明可用。
+
+## 单元测试
+
+`tests/test_text_layout_page_wide_options.py`（8 例）：
+
+- 整页枚举顺序；
+- **场景里没有 TextBlkItem 时仍能从 manager 取到整页**（本次核心回归）；
+- 没有 manager 时回退到 `textLayer` 子项；
+- 勾选/锚点作用于整页；全局模式同时更新默认值；
+- 显式选中不会被扩大；其他参数保持原绑定、不被误扩大。
+
+## 教训（已写进做法）
+
+**在真实主窗口里跑一次，抵过十次离屏推理。** 本轮连续三次「修复」都是先假设、再让用户
+验证，代价是用户的时间和信任。以后凡涉及「界面操作 → 画布可见变化」的改动，先用
+`--proj-dir` 驱动真实窗口渲染出图，再交给用户确认。
 
 ## 上游可提交性
 
-**需改造**：本改动改变了这两个参数的面板语义（默认值 vs 整页），属于产品决策，
-上游可能偏好「先选中再改」或给它们单独的 `let_*` 开关。已作为**独立提交**放进待发系列，
-作者可以整条丢弃而不影响前两个功能。
+**需改造**：面板语义（默认值 vs 整页）属于产品决策，已作为独立提交放进待发系列，
+作者可整条丢弃而不影响前两个功能。
