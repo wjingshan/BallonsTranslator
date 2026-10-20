@@ -1147,6 +1147,14 @@
         <source>Diameter of the floating button in pixels.</source>
         <translation>右下角悬浮按钮的直径（像素）。</translation>
     </message>
+    <message>
+        <source>White outline around the peek button</source>
+        <translation>探图按钮加白色描边</translation>
+    </message>
+    <message>
+        <source>Draw a white rim so the bubble stays readable on dark artwork.</source>
+        <translation>给气泡加一圈白边，避免在深色画面上看不清。</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
