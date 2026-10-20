@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 from qtpy.QtWidgets import (
     QApplication,
@@ -1108,11 +1108,52 @@ class FontFormatPanel(Widget):
         else:
             return None
 
+    # Options that place the settled page layout rather than one block's
+    # typography. Existing blocks never inherit the global default, and the
+    # panel starts bound to that default, so a change here must reach the
+    # canvas: the selection when there is one, otherwise the whole page.
+    PAGE_WIDE_PARAMS = frozenset({'vertical_alignment', 'roman_word_rotation'})
+
+    def page_text_items(self) -> List[TextBlkItem]:
+        """Return every text block on the current page in index order.
+
+        >>> callable(FontFormatPanel.page_text_items)
+        True
+        """
+        view = getattr(SW.canvas, 'gv', SW.canvas)
+        scene = view.scene() if view is not None else None
+        if scene is None:
+            return []
+        return sorted(
+            (item for item in scene.items() if isinstance(item, TextBlkItem)),
+            key=lambda item: item.idx,
+        )
+
     def on_param_changed(self, param_name: str, value):
         func = handle_ffmt_change.get(param_name)
         func_kwargs = {}
         if param_name in {'font_size', 'rel_font_size'}:
             func_kwargs['clip_size'] = True
+
+        if param_name in self.PAGE_WIDE_PARAMS:
+            targets = self.textblk_item or self.page_text_items()
+            if self.global_mode():
+                # Keep the default current for blocks created later without
+                # pushing a second undo step for the same user action.
+                self.global_format[param_name] = value
+                self.update_text_style_label()
+            if targets:
+                func(
+                    param_name,
+                    value,
+                    C.active_format,
+                    is_global=False,
+                    blkitems=targets,
+                    set_focus=True,
+                    **func_kwargs,
+                )
+            return
+
         if self.global_mode():
             func(param_name, value, self.global_format, is_global=True, **func_kwargs)
             self.update_text_style_label()
