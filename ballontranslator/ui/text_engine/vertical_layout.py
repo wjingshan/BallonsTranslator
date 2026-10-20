@@ -90,10 +90,6 @@ PUNSET_INSEPARABLE_REPEAT = {'—', '―', '‥', '…', '⋯'}
 # A Latin word may tighten its cells this much to stay in one column;
 # beyond that it is kept whole and allowed to overflow instead of splitting.
 _WORD_MIN_SCALE = 0.92
-
-# A column may grow by this fraction to absorb a one-or-two cell tail
-# instead of starting a column that holds almost nothing.
-_ORPHAN_MAX_GROW = 0.08
 PUNSET_NONBRACKET = {
     '⸺', '…', '⋯', '～', '-', '–', '—', '＿', '﹏', '~',
     '〜', '‐', '゠', 'ー', '〰', '‑', '‒', '－', 'ｰ', '⸻', '⹀',
@@ -164,21 +160,6 @@ def _is_non_fullwidth_roman(char: str) -> bool:
         return False
     name = unicodedata.name(char, '')
     return name.startswith('LATIN ') or name.startswith('ROMAN NUMERAL ')
-
-
-def _tail_cell_count(text: str, start: int, utf16_indexing: bool) -> int:
-    """Count the grapheme cells left from ``start``, ignoring spaces.
-
-    >>> _tail_cell_count('abc漢', 2, False)
-    2
-    >>> _tail_cell_count('abc  ', 3, False)
-    0
-    """
-    if utf16_indexing:
-        tail = _utf16_slice(text, start, _utf16_length(text) - start)
-    else:
-        tail = text[start:]
-    return _grapheme_count(tail.strip())
 
 
 def _roman_word_ends(text: str) -> Dict[int, int]:
@@ -2815,21 +2796,6 @@ class VerticalTextDocumentLayout(SceneTextLayout):
                 width_list.append(current_line_metrics)
             else:
                 width_list.append((-1.0, 0.0, 0.0))
-            if out_of_vspace and not force_ruby_wrap:
-                # Keep a one-or-two cell tail in this column instead of
-                # starting a column that holds almost nothing (0009).
-                tail_cells = _tail_cell_count(
-                    blk_text, char_idx, utf16_indexing
-                )
-                if 0 < tail_cells <= 2:
-                    tail_extra = tail_cells * tbr_h
-                    if tail_extra <= available_height * _ORPHAN_MAX_GROW:
-                        out_of_vspace = False
-                        column_overflow = True
-                        self.min_height = max(
-                            self.min_height,
-                            char_yoffset_lst[-1] + tail_extra,
-                        )
             if (
                 out_of_vspace
                 and not force_ruby_wrap
