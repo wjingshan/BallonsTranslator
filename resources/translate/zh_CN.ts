@@ -1103,6 +1103,14 @@
         <source>Include numbers</source>
         <translation>包含数字</translation>
     </message>
+    <message>
+        <source>Enlarge vertical text to fill the box</source>
+        <translation>竖排自动放大字号填满文字框</translation>
+    </message>
+    <message>
+        <source>Only grows vertical blocks that leave the column clearly under-filled, and never past 1.6x.</source>
+        <translation>仅当竖排文字明显没填满文字框时才放大，最多放大到 1.6 倍。</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
