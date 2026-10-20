@@ -1111,6 +1111,18 @@
         <source>Only grows vertical blocks that leave the column clearly under-filled, and never past 1.6x.</source>
         <translation>仅当竖排文字明显没填满文字框时才放大，最多放大到 1.6 倍。</translation>
     </message>
+    <message>
+        <source>Automatic font size limit</source>
+        <translation>自动字号上限</translation>
+    </message>
+    <message>
+        <source>Automatic font sizes above this multiple of the page median are pulled down. 0 disables the limit.</source>
+        <translation>自动字号超过同页中位字号的这个倍数时会被压低；0 表示不限制。</translation>
+    </message>
+    <message>
+        <source>Include letters</source>
+        <translation>包含字母</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
