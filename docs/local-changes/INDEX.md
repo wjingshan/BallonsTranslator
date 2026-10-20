@@ -6,5 +6,6 @@
 | 0002 | 2026-10-20 | 文字框内垂直对齐（顶/中/底） | 已验证 | 需改造 | [0002-frame-vertical-alignment.md](0002-frame-vertical-alignment.md) |
 | 0003 | 2026-10-20 | 竖排西文整词旋转（紧凑） | 已验证 | 需改造 | [0003-roman-word-rotation.md](0003-roman-word-rotation.md) |
 | 0004 | 2026-10-20 | 上游提 PR 用的干净改动包 | 已验证 | — | [0004-upstream-pr-bundle.md](0004-upstream-pr-bundle.md) |
+| 0005 | 2026-10-20 | 修复：勾选整词旋转后竖排几何不更新 | 已验证 | 适合 | [0005-roman-rotation-cache-invalidation.md](0005-roman-rotation-cache-invalidation.md) |
 
 说明：状态取值 `验证中` / `已验证` / `已回滚`；上游可提交性取值 `适合` / `需改造` / `不适合` / `—`。
