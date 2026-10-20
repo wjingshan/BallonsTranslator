@@ -1123,6 +1123,22 @@
         <source>Include letters</source>
         <translation>包含字母</translation>
     </message>
+    <message>
+        <source>Peek original image</source>
+        <translation>按住看原图</translation>
+    </message>
+    <message>
+        <source>Hold this shortcut to see the untouched page.</source>
+        <translation>按住该快捷键查看未处理的原始页面。</translation>
+    </message>
+    <message>
+        <source>Peek inpainted image</source>
+        <translation>按住看修复图</translation>
+    </message>
+    <message>
+        <source>Hold this shortcut to see the page with its lettering removed.</source>
+        <translation>按住该快捷键查看去掉文字后的页面。</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
