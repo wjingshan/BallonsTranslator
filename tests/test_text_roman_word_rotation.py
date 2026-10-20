@@ -193,6 +193,25 @@ class RomanWordRotationLayoutTest(unittest.TestCase):
         for letter in 'Master':
             self.assertTrue(layout.needs_vertical_rotation(letter))
 
+    def test_column_cache_key_separates_both_rotation_values(self) -> None:
+        """Toggling must not replay a column measured upright.
+
+        Vertical layout caches plain-column geometry under
+        ``_plain_column_context``. Two configurations that settle different
+        advances must therefore produce different keys; otherwise enabling the
+        option on an existing item keeps the old one-emoji-per-cell geometry.
+        """
+        upright = self._make_item()
+        rotated = self._make_item(word_rotation=True)
+        self.assertNotEqual(
+            upright.layout._plain_column_context,
+            rotated.layout._plain_column_context,
+        )
+
+        before = upright.layout._plain_column_context
+        upright.setRomanWordRotation(True)
+        self.assertNotEqual(upright.layout._plain_column_context, before)
+
 
 class RomanWordRotationCommandTest(unittest.TestCase):
 

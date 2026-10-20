@@ -703,6 +703,9 @@ class VerticalTextDocumentLayout(SceneTextLayout):
             self.available_height, self._effect_padding,
             self.line_spacing, self.linespacing_type, self.letter_spacing,
             self.fontformat.standard_vertical_roman_alignment,
+            # Roman word rotation changes the settled column advance, so a
+            # cached column measured under the other value must not be reused.
+            self.fontformat.roman_word_rotation,
             pcfg.compact_vertical_punctuation_spacing,
             option.alignment(), option.textDirection(), option.flags(),
             option.useDesignMetrics(), option.tabStopDistance(),
