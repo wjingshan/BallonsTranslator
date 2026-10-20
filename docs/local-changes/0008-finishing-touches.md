@@ -60,4 +60,19 @@
 ## 上游可提交性
 
 - 整词不跨列、省略号折叠：**适合**（通用排版正确性）。
-- 中文兜底 `_localized`：**需改造**（上游应改为把词条写进 `.ts` 并重新编译，而非运行时兜底）。
+- 控件文案：**已改为正规词条** —— 见下方补记。
+
+## 补记：改用真正的 `.qm` 词条（已安装 lrelease）
+
+本机原本没有 lrelease。装法：`pip install --target H:\DSH\workbench\_qttools PySide6-Essentials`
+（82MB），只借用 `_qttools\PySide6\lrelease.exe`；应用环境仍是 PyQt6，不共处一个 `sys.path`。
+
+随后只往 `zh_CN.ts` 的两个上下文各插入必要条目（**不用 `pylupdate6` 全量重排**，避免行号重写
+产生巨大 diff），再用 lrelease 编译 `zh_CN.qm`（1190 条，0 未完成）。
+
+校验：`QTranslator.load` 后 `translate('TextAdvancedFormatPanel', 'Rotate Roman Words')` 返回
+「西文整词旋转」；真实字体抓图确认面板显示「垂直对齐 自动」，与「行距类型」同字号。
+
+因此代码里已删掉运行时兜底 `_localized`，全部回到标准 `self.tr()`。其他语言暂无这七条词条，
+会显示英文。`resources/` 不在上游补丁包路径内，随 fork 提交。
+
