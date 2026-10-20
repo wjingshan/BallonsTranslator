@@ -1095,6 +1095,14 @@
         <source>Vertical Align</source>
         <translation>垂直对齐</translation>
     </message>
+    <message>
+        <source>Max length</source>
+        <translation>最大长度</translation>
+    </message>
+    <message>
+        <source>Include numbers</source>
+        <translation>包含数字</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
