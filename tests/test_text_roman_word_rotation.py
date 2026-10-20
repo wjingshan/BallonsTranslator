@@ -171,6 +171,28 @@ class RomanWordRotationLayoutTest(unittest.TestCase):
         item.setRomanWordRotation(True)
         self.assertEqual(self._advances(item), before)
 
+    def test_rotation_composes_with_the_vertical_anchor(self) -> None:
+        """Both options settle in the same relayout without overriding it."""
+        from ballontranslator.utils.fontformat import TextVerticalAlignment
+
+        item = self._make_item(
+            word_rotation=True, bounds=(0, 0, 300, 400)
+        )
+        item.fontformat.vertical_alignment = TextVerticalAlignment.Center
+        item.layout.reLayout()
+        layout = item.layout
+        lines = [
+            layout.y_offset_lst[0][index][0]
+            for index in range(
+                item.document().firstBlock().layout().lineCount()
+            )
+        ]
+        self.assertGreater(min(lines), 1.0)
+        slack = max(0.0, layout.available_height - layout.shrink_height)
+        self.assertAlmostEqual(min(lines), slack / 2, delta=0.5)
+        for letter in 'Master':
+            self.assertTrue(layout.needs_vertical_rotation(letter))
+
 
 class RomanWordRotationCommandTest(unittest.TestCase):
 
