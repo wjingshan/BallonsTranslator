@@ -1139,6 +1139,14 @@
         <source>Hold this shortcut to see the page with its lettering removed.</source>
         <translation>按住该快捷键查看去掉文字后的页面。</translation>
     </message>
+    <message>
+        <source>Peek button size</source>
+        <translation>探图按钮大小</translation>
+    </message>
+    <message>
+        <source>Diameter of the floating button in pixels.</source>
+        <translation>右下角悬浮按钮的直径（像素）。</translation>
+    </message>
 </context>
 <context>
     <name>DialogCloseButton</name>
