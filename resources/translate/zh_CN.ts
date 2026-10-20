@@ -7689,4 +7689,15 @@ Then restart Photoshop. Explorer will now open the source file and destination l
         <translation>图像文件 (*.png *.jpg *.jpeg *.webp *.bmp *.jxl)</translation>
     </message>
 </context>
+<context>
+    <name>PageFitButton</name>
+    <message>
+        <source>Fit the whole page</source>
+        <translation>整体显示整页</translation>
+    </message>
+    <message>
+        <source>Back to the previous zoom and position</source>
+        <translation>回到之前的缩放与位置</translation>
+    </message>
+</context>
 </TS>
