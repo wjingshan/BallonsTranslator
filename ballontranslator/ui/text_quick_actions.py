@@ -92,6 +92,19 @@ def restore_original_rect(item) -> bool:
             rect = (
                 stored[0], stored[1], (stored[2], stored[3])
             )
+    if rect is None:
+        # No capture (the block was already free when the page loaded): the
+        # detected text region is the only known original geometry.
+        bbox = getattr(getattr(item, 'blk', None), 'xyxy', None)
+        try:
+            x0, y0, x1, y1 = (float(value) for value in bbox)
+        except (TypeError, ValueError):
+            x0 = x1 = 0.0
+        if x1 > x0 and y1 > y0:
+            rect = (
+                x1 - x0, y1 - y0,
+                ((x0 + x1) / 2.0, (y0 + y1) / 2.0),
+            )
     try:
         if rect is None:
             return hug_content(item)
