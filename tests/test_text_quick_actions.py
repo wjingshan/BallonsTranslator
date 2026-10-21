@@ -382,5 +382,33 @@ class StoredRectTest(unittest.TestCase):
                                places=0)
 
 
+class DetectedRegionFallbackTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_missing_capture_falls_back_to_the_detected_region(self) -> None:
+        """A block freed before the rect was recorded must still recover.
+
+        The detected text region is the only original geometry such a block
+        carries, so switching the mode off restores that instead of leaving the
+        narrow single-column frame.
+        """
+        from ballontranslator.ui.text_quick_actions import restore_original_rect
+
+        item = make_item('库尔基加尔', (0, 0, 220, 90), font_size=40)
+        item.blk.xyxy = [0.0, 0.0, 300.0, 200.0]
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        if hasattr(item, 'free_wrap_original_rect'):
+            delattr(item, 'free_wrap_original_rect')
+        item.blk.pre_free_wrap_rect = None
+
+        self.assertTrue(restore_original_rect(item))
+        self.assertAlmostEqual(item.boundingRect().width(), 300.0, places=0)
+        self.assertAlmostEqual(item.boundingRect().height(), 200.0, places=0)
+
+
 if __name__ == '__main__':
     unittest.main()
