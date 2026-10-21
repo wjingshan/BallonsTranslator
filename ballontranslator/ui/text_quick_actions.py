@@ -330,15 +330,21 @@ class TextQuickActions:
         """
         from ballontranslator.utils.fontformat import px2pt
 
+        from ballontranslator.ui.text_engine.formatting.commands import (
+            suspend_undo_commands,
+        )
+
         self._last_size = size
         ratio = size / self._base_size if self._base_size else 1.0
-        for item in self._items(self._all_blocks):
-            try:
-                item.fontformat.font_size = size
-                item.setFontSize(px2pt(size))
-            except RuntimeError:
-                continue
-            self._scale_frame(item, ratio)
+        # One undo step is pushed when the gesture ends, never per frame.
+        with suspend_undo_commands():
+            for item in self._items(self._all_blocks):
+                try:
+                    item.fontformat.font_size = size
+                    item.setFontSize(px2pt(size))
+                except RuntimeError:
+                    continue
+                self._scale_frame(item, ratio)
         self.refresh()
 
     # -- scale gesture ----------------------------------------------------

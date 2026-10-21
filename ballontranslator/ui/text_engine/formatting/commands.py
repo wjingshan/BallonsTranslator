@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import List, Callable, Dict
 import copy
 
@@ -20,6 +21,32 @@ from ... import shared_widget as SW
 from ballontranslator.utils.fontformat import FontFormat, FontWeight, px2pt
 from ballontranslator.utils.io_utils import empty_func
 from ..item import TextBlkItem
+
+_UNDO_SUSPENDED = 0
+
+
+@contextmanager
+def suspend_undo_commands():
+    """Stop items from pushing undo commands while a change is replayed.
+
+    ``setFontSize`` and friends emit ``push_undo_stack`` on every call, so a
+    drag preview flooded the stack and, worse, our own command pushed another
+    command from inside ``redo()``, which Qt does not allow.
+
+    >>> callable(suspend_undo_commands)
+    True
+    """
+    global _UNDO_SUSPENDED
+    _UNDO_SUSPENDED += 1
+    try:
+        yield
+    finally:
+        _UNDO_SUSPENDED -= 1
+
+
+def undo_suspended() -> bool:
+    return _UNDO_SUSPENDED > 0
+
 
 global_default_set_kwargs = dict(set_selected=False, restore_cursor=False)
 local_default_set_kwargs = dict(set_selected=True, restore_cursor=True)
@@ -236,6 +263,11 @@ def _apply_scale_snapshot(param_name: str, values, act_ffmt: FontFormat,
                           is_global: bool, blkitems: List[TextBlkItem],
                           **kwargs):
     """Put a captured (size, frame, centre) snapshot back on each block."""
+    with suspend_undo_commands():
+        _apply_scale_snapshot_items(blkitems, values)
+
+
+def _apply_scale_snapshot_items(blkitems, values):
     for blkitem, snapshot in zip(blkitems, values):
         try:
             blkitem.fontformat.font_size = snapshot['size']
@@ -285,6 +317,11 @@ def apply_no_forced_wrap(param_name: str, values, act_ffmt: FontFormat,
                          is_global: bool, blkitems: List[TextBlkItem],
                          **kwargs):
     """Set the flag and relayout; used as the command's payload."""
+    with suspend_undo_commands():
+        _apply_no_forced_wrap_items(blkitems, values)
+
+
+def _apply_no_forced_wrap_items(blkitems, values):
     for blkitem, value in zip(blkitems, values):
         blkitem.fontformat.no_forced_wrap = bool(value)
         try:
