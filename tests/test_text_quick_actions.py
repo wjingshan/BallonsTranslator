@@ -302,6 +302,21 @@ class ScalePersistenceTest(unittest.TestCase):
         self.assertAlmostEqual(item.fontformat.font_size, 60.0, places=2)
         canvas.stack.commands[0].undo()
         self.assertAlmostEqual(item.fontformat.font_size, 40.0, places=2)
+        # Redo used to push another command from inside redo(), which Qt
+        # does not allow, so the stack broke and the page saved nothing.
+        canvas.stack.commands[0].redo()
+        self.assertAlmostEqual(item.fontformat.font_size, 60.0, places=2)
+
+    def test_replay_runs_with_pushes_suspended(self) -> None:
+        from ballontranslator.ui.text_engine.formatting.commands import (
+            suspend_undo_commands,
+            undo_suspended,
+        )
+
+        self.assertFalse(undo_suspended())
+        with suspend_undo_commands():
+            self.assertTrue(undo_suspended())
+        self.assertFalse(undo_suspended())
 
 
 class FreeWrapHugTest(unittest.TestCase):

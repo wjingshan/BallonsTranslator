@@ -1155,6 +1155,10 @@ class SceneTextManager(QObject):
             blk_item.refresh_cache_policy()
 
     def on_push_textitem_undostack(self, num_steps: int, is_formatting: bool) -> None:
+        from ..formatting.commands import undo_suspended
+
+        if undo_suspended():
+            return
         blkitem: TextBlkItem = self.sender()
         e_trans = self.pairwidget_list[blkitem.idx].e_trans if not is_formatting else None
         self.canvas.push_undo_command(TextItemEditCommand(
