@@ -138,6 +138,30 @@ class PageFitController:
     def _page_rect(self):
         return self.canvas.sceneRect()
 
+    def _page_size(self):
+        """Return the page size in image pixels, independent of the zoom.
+
+        ``sceneRect`` follows the current scale, so fitting against it mixed the
+        previous zoom into the new factor; the loaded page image does not move.
+
+        >>> callable(PageFitController._page_size)
+        True
+        """
+        canvas = self.canvas
+        array = getattr(
+            getattr(canvas, 'imgtrans_proj', None), 'img_array', None
+        )
+        shape = getattr(array, 'shape', None)
+        if shape:
+            height, width = shape[0], shape[1]
+            if width > 0 and height > 0:
+                return float(width), float(height)
+        rect = self.canvas.sceneRect()
+        scale = float(getattr(self.canvas, 'scale_factor', 1.0) or 1.0)
+        if scale <= 0:
+            return rect.width(), rect.height()
+        return rect.width() / scale, rect.height() / scale
+
     def fit(self, restore_to_default: bool = False) -> bool:
         """Scale so the page fits the viewport; returns False if it cannot.
 
@@ -149,29 +173,27 @@ class PageFitController:
         view = getattr(canvas, 'gv', None)
         if view is None:
             return False
-        rect = self._page_rect()
-        if rect.width() <= 0 or rect.height() <= 0:
+        page_width, page_height = self._page_size()
+        if page_width <= 0 or page_height <= 0:
             return False
         viewport = view.viewport()
         width = viewport.width()
         height = viewport.height()
         if width <= 0 or height <= 0:
             return False
-        current = float(getattr(canvas, 'scale_factor', 1.0) or 1.0)
-        factor = min(width / rect.width(), height / rect.height())
-        if factor <= 0:
+        target = min(width / page_width, height / page_height)
+        if target <= 0:
             return False
+        current = float(getattr(canvas, 'scale_factor', 1.0) or 1.0)
         hbar, vbar = self._scrollbars()
         if restore_to_default:
             self._saved = (1.0, 0, 0)
-            if current != 1.0:
-                canvas.scaleImage(1.0 / current)
-                current = 1.0
-                factor = min(width / rect.width(), height / rect.height())
         else:
             self._saved = (current, hbar.value(), vbar.value())
-        canvas.scaleImage(factor)
-        view.centerOn(rect.center())
+        # scaleImage multiplies the current zoom, so convert to a ratio.
+        if current > 0:
+            canvas.scaleImage(target / current)
+        view.centerOn(self._page_rect().center())
         self.fitted = True
         return True
 
