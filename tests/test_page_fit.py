@@ -141,3 +141,39 @@ class PageFitTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FitButtonLookTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_button_reads_as_a_switch(self) -> None:
+        """Fitted shows a blue fill with white ink; restored goes back."""
+        from qtpy.QtWidgets import QWidget
+
+        from ballontranslator.ui.page_fit import PageFitButton
+
+        class Stub:
+            def __init__(self):
+                self.fitted = False
+                self.clicks = 0
+
+            def toggle(self):
+                self.fitted = not self.fitted
+                self.clicks += 1
+
+        controller = Stub()
+        parent = QWidget()  # keep the parent alive so the button survives
+        button = PageFitButton(controller, parent)
+        button.refresh()
+        self.assertNotIn('2f7cf6', button.styleSheet())
+
+        button.click()
+        self.assertTrue(controller.fitted)
+        self.assertIn('2f7cf6', button.styleSheet())
+
+        button.click()
+        self.assertFalse(controller.fitted)
+        self.assertNotIn('2f7cf6', button.styleSheet())

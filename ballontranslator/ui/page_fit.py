@@ -19,7 +19,7 @@ INK = QColor(47, 51, 57)
 _icon_cache = {}
 
 
-def _asset_icon(size: int, outline: int) -> QIcon | None:
+def _asset_icon(size: int, outline: int, colour=None) -> QIcon | None:
     """Rasterise the supplied SVG at ``size`` with an optional white rim."""
     key = ('asset', size, int(outline))
     cached = _icon_cache.get(key)
@@ -59,7 +59,7 @@ def _asset_icon(size: int, outline: int) -> QIcon | None:
                 continue
         # The artwork ships as ink-on-transparent; recolour it to dark grey
         # so it matches the rest of the floating controls.
-        pixmap = _silhouette(pixmap, INK)
+        pixmap = _silhouette(pixmap, INK if colour is None else colour)
         if outline > 0:
             icon_pixmap = _with_white_outline(
                 pixmap, max(2, size // 22), size
@@ -77,7 +77,8 @@ def _asset_icon(size: int, outline: int) -> QIcon | None:
     return None
 
 
-def make_magnifier_icon(size: int = 44, outline: int = 0) -> QIcon:
+def make_magnifier_icon(size: int = 44, outline: int = 0,
+                        colour=None) -> QIcon:
     """Draw a manga-style magnifier: ink ring plus handle.
 
     >>> from qtpy.QtWidgets import QApplication
@@ -85,7 +86,7 @@ def make_magnifier_icon(size: int = 44, outline: int = 0) -> QIcon:
     >>> isinstance(make_magnifier_icon(64), QIcon)
     True
     """
-    asset = _asset_icon(size, outline)
+    asset = _asset_icon(size, outline, colour)
     if asset is not None:
         return asset
     canvas = QPixmap(size, size)
@@ -225,11 +226,16 @@ class PageFitButton(QToolButton):
         self.set_button_size(size)
         self.clicked.connect(self._on_clicked)
 
+    ACTIVE_BACKGROUND = '#2f7cf6'
+
     def _prepare_look(self, size: int) -> None:
+        background = self.ACTIVE_BACKGROUND if getattr(
+            self.controller, 'fitted', False
+        ) else 'transparent'
         self.setStyleSheet(
             'QToolButton#PageFitButton { border: none;'
-            ' background: transparent; padding: 0px;'
-            ' border-radius: %dpx; }' % (size // 2)
+            ' background: %s; padding: 0px;'
+            ' border-radius: %dpx; }' % (background, size // 2)
         )
 
     def set_button_size(self, size: int) -> None:
@@ -241,10 +247,17 @@ class PageFitButton(QToolButton):
         self.refresh()
 
     def refresh(self) -> None:
-        self.setIcon(make_magnifier_icon(self._size - 8, outline=3))
+        fitted = bool(getattr(self.controller, 'fitted', False))
+        # White ink on the blue fill while the whole-page view is active, so
+        # the button reads as a switch instead of a one-shot action.
+        colour = Qt.GlobalColor.white if fitted else None
+        self.setIcon(
+            make_magnifier_icon(self._size - 8, outline=3, colour=colour)
+        )
+        self._prepare_look(self._size)
         self.setToolTip(
             self.tr('Fit the whole page')
-            if not self.controller.fitted
+            if not fitted
             else self.tr('Back to the previous zoom and position')
         )
 
