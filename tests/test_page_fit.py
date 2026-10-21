@@ -190,3 +190,51 @@ class FitButtonLookTest(unittest.TestCase):
         button.click()
         self.assertFalse(controller.fitted)
         self.assertEqual(self._blue_pixels(button), 0)
+
+
+class FitGeometryTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_fit_ignores_the_current_zoom(self) -> None:
+        """The factor comes from the page image, not from the scaled scene.
+
+        ``sceneRect`` follows the zoom, so using it made the new page inherit
+        the previous page's factor and the page was no longer fully shown.
+        """
+        from types import SimpleNamespace
+
+        from qtpy.QtCore import QRectF
+        from qtpy.QtWidgets import QGraphicsView
+
+        from ballontranslator.ui.page_fit import PageFitController
+
+        class StubCanvas:
+            def __init__(self, view):
+                self.gv = view
+                self.scale_factor = 0.5
+                import numpy as np
+
+                self.imgtrans_proj = SimpleNamespace(
+                    img_array=np.zeros((1000, 500, 3), dtype=np.uint8)
+                )
+                self.scales = []
+
+            def sceneRect(self):
+                # what the widget reports: already scaled by the zoom
+                return QRectF(0, 0, 500 * 0.5, 1000 * 0.5)
+
+            def scaleImage(self, factor):
+                self.scales.append(factor)
+                self.scale_factor *= factor
+
+        view = QGraphicsView()
+        view.setFixedSize(250, 250)
+        canvas = StubCanvas(view)
+        controller = PageFitController(canvas)
+        self.assertTrue(controller.fit())
+        viewport = view.viewport()
+        expected = min(viewport.width() / 500.0, viewport.height() / 1000.0)
+        self.assertAlmostEqual(canvas.scale_factor, expected, places=3)
