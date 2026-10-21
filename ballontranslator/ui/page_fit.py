@@ -21,7 +21,10 @@ _icon_cache = {}
 
 def _asset_icon(size: int, outline: int, colour=None) -> QIcon | None:
     """Rasterise the supplied SVG at ``size`` with an optional white rim."""
-    key = ('asset', size, int(outline))
+    # The colour is part of the identity: the same size and outline in two
+    # colours must not share one cached icon.
+    colour_key = None if colour is None else int(colour.rgba())
+    key = ('asset', size, int(outline), colour_key)
     cached = _icon_cache.get(key)
     if cached is not None:
         return cached
@@ -226,16 +229,15 @@ class PageFitButton(QToolButton):
         self.set_button_size(size)
         self.clicked.connect(self._on_clicked)
 
-    ACTIVE_BACKGROUND = '#2f7cf6'
+    ACTIVE_COLOUR = QColor(47, 124, 246)
 
     def _prepare_look(self, size: int) -> None:
-        background = self.ACTIVE_BACKGROUND if getattr(
-            self.controller, 'fitted', False
-        ) else 'transparent'
+        # Keep the background transparent: the state is carried by the
+        # artwork colour, not by a disc behind it.
         self.setStyleSheet(
             'QToolButton#PageFitButton { border: none;'
-            ' background: %s; padding: 0px;'
-            ' border-radius: %dpx; }' % (background, size // 2)
+            ' background: transparent; padding: 0px;'
+            ' border-radius: %dpx; }' % (size // 2)
         )
 
     def set_button_size(self, size: int) -> None:
@@ -248,9 +250,8 @@ class PageFitButton(QToolButton):
 
     def refresh(self) -> None:
         fitted = bool(getattr(self.controller, 'fitted', False))
-        # White ink on the blue fill while the whole-page view is active, so
-        # the button reads as a switch instead of a one-shot action.
-        colour = Qt.GlobalColor.white if fitted else None
+        # Blue artwork while the whole-page view is active, grey otherwise.
+        colour = self.ACTIVE_COLOUR if fitted else None
         self.setIcon(
             make_magnifier_icon(self._size - 8, outline=3, colour=colour)
         )
