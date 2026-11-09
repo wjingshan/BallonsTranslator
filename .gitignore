@@ -69,3 +69,6 @@ data/dictionaries/
 custom_modules/*
 !custom_modules/put your custom modules here.txt
 !custom_modules/trans_custom_copy_source.py
+
+# Design sources stay local: the PSD is not needed to build or run
+*.psd

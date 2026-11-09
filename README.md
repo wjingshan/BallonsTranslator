@@ -10,6 +10,10 @@
 
 <p align="center">深度学习辅助漫画翻译工具，支持一键机翻和简单的图像/文本编辑</p>
 
+> **个人修改版 / Personal fork**：本仓库非官方版本，是 [dmMaze/BallonsTranslator](https://github.com/dmMaze/BallonsTranslator) 的个人定制分支 `Rae`，包含竖排列对齐、西文整词换行、原图比对与整页适配套件等改动，详见 [BRANCH.md](BRANCH.md)。原始项目与版权归原作者所有，许可证仍为 GPL-3.0。
+>
+> Unofficial personal fork. The upstream project and its copyright belong to the original author; this branch only adds the changes listed in BRANCH.md under the same GPL-3.0 licence.
+
 
 
 <p align="center">
