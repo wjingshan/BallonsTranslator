@@ -525,6 +525,7 @@ class SceneTextManager(QObject):
                 and pcfg.let_fntsize_flag == 0
                 and blk_item is not None
                 and textblock.vertical
+                and not textblock.manual_font_size
             ):
                 fit_vertical_font_size(blk_item)
         if self.auto_textlayout_flag:

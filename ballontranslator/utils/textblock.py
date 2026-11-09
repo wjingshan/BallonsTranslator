@@ -121,6 +121,9 @@ class TextBlock:
     # frame before the text was freed from it, so switching the mode
     # off restores the original box even after a reload
     pre_free_wrap_rect: List = None
+    # set once the user picks the font size by hand, so that reloading a page
+    # does not re-apply the automatic layout and undo the edit
+    manual_font_size: bool = False
     rich_text: str = ""
     _bounding_rect: List = None
     src_is_vertical: bool = None

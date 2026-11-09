@@ -79,6 +79,9 @@ class ResizeTextItemsCommand(QUndoCommand):
                 was_repainting = item.repaint_on_changed
                 item.in_redo_undo = True
                 item.repaint_on_changed = False
+                blk = getattr(item, 'blk', None)
+                if blk is not None:
+                    blk.manual_font_size = True
                 cursor = QTextCursor(item.document())
                 cursor.beginEditBlock()
                 try:

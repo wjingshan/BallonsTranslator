@@ -383,8 +383,12 @@ class TextQuickActions:
         if not changed:
             return
         from ballontranslator.ui.text_engine.formatting.commands import (
+            mark_manual_font_size,
             push_scale_snapshot,
         )
+
+        for item in items:
+            mark_manual_font_size(item)
 
         canvas = self.view.scene() if hasattr(self.view, 'scene') else None
         before = [initial[id(item)] for item in items]

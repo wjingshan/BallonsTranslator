@@ -251,13 +251,29 @@ def ffmt_change_font_size(param_name: str, values: float, act_ffmt: FontFormat, 
         if value < 0:
             continue
         value = px2pt(value)
+        mark_manual_font_size(blkitem)
         blkitem.setFontSize(value, clip_size=clip_size, **set_kwargs)
 
 @font_formating(is_property=False)
 def ffmt_change_rel_font_size(param_name: str, values: float, act_ffmt: FontFormat, is_global: bool, blkitems: List[TextBlkItem], clip_size=False, **kwargs):
     set_kwargs = global_default_set_kwargs if is_global else local_default_set_kwargs
     for blkitem, value in zip(blkitems, values):
+        mark_manual_font_size(blkitem)
         blkitem.setRelFontSize(value, clip_size=clip_size, **set_kwargs)
+
+def mark_manual_font_size(blkitem) -> None:
+    """Remember that the size on this block was chosen by hand.
+
+    Reloading a page re-runs the optional vertical auto-fit; without this flag
+    it would grow the text back into any room left in the frame and throw away
+    the size the user picked.
+
+    >>> callable(mark_manual_font_size)
+    True
+    """
+    blk = getattr(blkitem, 'blk', None)
+    if blk is not None:
+        blk.manual_font_size = True
 
 def _apply_scale_snapshot(param_name: str, values, act_ffmt: FontFormat,
                           is_global: bool, blkitems: List[TextBlkItem],
