@@ -73,8 +73,19 @@ class _PanelShim:
     _apply_page_wide_option = FontFormatPanel._apply_page_wide_option
     on_param_changed = FontFormatPanel.on_param_changed
 
+    class _Drag:
+        """Stand-in for the spacing drag sessions upstream cancels."""
+
+        def __init__(self) -> None:
+            self.cancelled = 0
+
+        def cancel(self) -> None:
+            self.cancelled += 1
+
     def __init__(self, global_format: FontFormat, is_global: bool) -> None:
         self.global_format = global_format
+        self.line_spacing_drag = self._Drag()
+        self.letter_spacing_drag = self._Drag()
         self.textblk_item = None
         self._is_global = is_global
         self.labels_updated = 0
