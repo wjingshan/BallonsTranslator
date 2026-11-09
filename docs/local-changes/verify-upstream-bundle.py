@@ -4,7 +4,11 @@ The bundle is exported by hand, so it silently rots: a new feature lands on the
 working branch while ``upstream-pr`` and the exported patches keep describing
 the previous state. Sending that would waste the author's time.
 
-Run after any change that touches the PR paths:
+The patch series is frozen at v1.5.20 (the PR was closed), so by default
+only the bundle's own consistency is checked; pass --check-source to also
+require the working branch to match it.
+
+Run after rebuilding the bundle:
 
     python docs/local-changes/verify-upstream-bundle.py
 
@@ -30,7 +34,9 @@ DEFAULT_BUNDLE = Path(r'H:\DSH\workbench\ball-upstream')
 
 def git(*args: str) -> bytes:
     result = subprocess.run(
-        ('git', *args),
+        # Fixed abbreviation: the default length grows with the object count,
+        # which made byte-identical series compare unequal.
+        ('git', '-c', 'core.abbrev=40', *args),
         cwd=Path(__file__).resolve().parents[2],
         capture_output=True,
     )
@@ -42,8 +48,9 @@ def git(*args: str) -> bytes:
     return result.stdout
 
 
-def parse_args(argv: list[str]) -> tuple[Path, str, str, str]:
+def parse_args(argv: list[str]) -> tuple[Path, str, str, str, bool]:
     bundle, branch, baseline, source = DEFAULT_BUNDLE, BRANCH, BASELINE, SOURCE
+    check_source = False
     rest = list(argv[1:])
     while rest:
         flag = rest.pop(0)
@@ -53,17 +60,19 @@ def parse_args(argv: list[str]) -> tuple[Path, str, str, str]:
             baseline = rest.pop(0)
         elif flag == '--source' and rest:
             source = rest.pop(0)
+        elif flag == '--check-source':
+            check_source = True
         elif flag == '--bundle' and rest:
             bundle = Path(rest.pop(0))
         elif not flag.startswith('-'):
             bundle = Path(flag)
         else:
             raise SystemExit(f'unknown argument: {flag}')
-    return bundle, branch, baseline, source
+    return bundle, branch, baseline, source, check_source
 
 
 def main(argv: list[str]) -> int:
-    bundle, branch_name, baseline, source = parse_args(argv)
+    bundle, branch_name, baseline, source, check_source = parse_args(argv)
     problems: list[str] = []
 
     branches = git('branch', '--list', branch_name).decode()
@@ -71,28 +80,28 @@ def main(argv: list[str]) -> int:
         print(f'FAIL: branch {branch_name!r} is missing.')
         return 1
 
-    source_branches = git('branch', '--list', source).decode()
-    if source not in source_branches:
-        print(f'FAIL: source branch {source!r} is missing.')
-        return 1
+    if check_source:
+        source_branches = git('branch', '--list', source).decode()
+        if source not in source_branches:
+            print(f'FAIL: source branch {source!r} is missing.')
+            return 1
 
-    # 1. The branch must carry every change the working branch made to PR paths.
-    drift = git('diff', '--stat', source, branch_name, '--', *PR_PATHS)
-    if drift.strip():
-        problems.append(
-            f'{branch_name} is behind {source} on PR paths; rebuild it:\n'
-            + drift.decode('utf-8', 'replace').rstrip()
+    # 1/2. Optional: the frozen series must still match the working branch.
+    if check_source:
+        drift = git('diff', '--stat', source, branch_name, '--', *PR_PATHS)
+        if drift.strip():
+            problems.append(
+                f'{branch_name} differs from {source} on PR paths:\n'
+                + drift.decode('utf-8', 'replace').rstrip()
+            )
+        only_source = git(
+            'diff', '--name-only', branch_name, source, '--', *PR_PATHS
         )
-
-    # 2. The working branch must not touch PR paths in ways the branch lacks.
-    only_source = git(
-        'diff', '--name-only', branch_name, source, '--', *PR_PATHS
-    )
-    if only_source.strip():
-        problems.append(
-            f'{source} has PR-path changes missing from the branch:\n  '
-            + '\n  '.join(only_source.decode().split())
-        )
+        if only_source.strip():
+            problems.append(
+                f'{source} has PR-path changes missing from the branch:\n  '
+                + '\n  '.join(only_source.decode().split())
+            )
 
     # 3. full.diff must be byte-identical to the current series.
     expected = git('diff', f'{baseline}..{branch_name}', '--', *PR_PATHS)
@@ -149,10 +158,13 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
+    scope = (
+        f', {branch_name} == {source} on {", ".join(PR_PATHS)}'
+        if check_source else ' (frozen series, source check skipped)'
+    )
     print(
         f'OK: {len(commits)} commit(s), {len(patches)} patch(es), '
-        f'full.diff matches, {branch_name} == {source} on '
-        f'{", ".join(PR_PATHS)}'
+        f'full.diff matches{scope}'
     )
     return 0
 
