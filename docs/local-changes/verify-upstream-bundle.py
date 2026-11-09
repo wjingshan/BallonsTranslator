@@ -1,10 +1,10 @@
 """Check that the upstream PR bundle still matches the local changes.
 
-The bundle is exported by hand, so it silently rots: a new feature lands on
-``master`` while ``upstream-pr`` and the exported patches keep describing the
-previous state. Sending that would waste the author's time.
+The bundle is exported by hand, so it silently rots: a new feature lands on the
+working branch while ``upstream-pr`` and the exported patches keep describing
+the previous state. Sending that would waste the author's time.
 
-Run before sending, or after any change that should reach upstream:
+Run after any change that touches the PR paths:
 
     python docs/local-changes/verify-upstream-bundle.py
 
@@ -20,6 +20,9 @@ from pathlib import Path
 
 BASELINE = 'fa3e137'
 BRANCH = 'upstream-pr'
+# The branch that carries the day-to-day work. ``master`` tracks upstream since
+# the fork split, so the series is compared against ``custom`` instead.
+SOURCE = 'custom'
 # Paths that belong in a pull request. docs/local-changes is local-only.
 PR_PATHS = ('ballontranslator', 'doc', 'tests')
 DEFAULT_BUNDLE = Path(r'H:\DSH\workbench\ball-upstream')
@@ -39,8 +42,8 @@ def git(*args: str) -> bytes:
     return result.stdout
 
 
-def parse_args(argv: list[str]) -> tuple[Path, str, str]:
-    bundle, branch, baseline = DEFAULT_BUNDLE, BRANCH, BASELINE
+def parse_args(argv: list[str]) -> tuple[Path, str, str, str]:
+    bundle, branch, baseline, source = DEFAULT_BUNDLE, BRANCH, BASELINE, SOURCE
     rest = list(argv[1:])
     while rest:
         flag = rest.pop(0)
@@ -48,17 +51,19 @@ def parse_args(argv: list[str]) -> tuple[Path, str, str]:
             branch = rest.pop(0)
         elif flag == '--baseline' and rest:
             baseline = rest.pop(0)
+        elif flag == '--source' and rest:
+            source = rest.pop(0)
         elif flag == '--bundle' and rest:
             bundle = Path(rest.pop(0))
         elif not flag.startswith('-'):
             bundle = Path(flag)
         else:
             raise SystemExit(f'unknown argument: {flag}')
-    return bundle, branch, baseline
+    return bundle, branch, baseline, source
 
 
 def main(argv: list[str]) -> int:
-    bundle, branch_name, baseline = parse_args(argv)
+    bundle, branch_name, baseline, source = parse_args(argv)
     problems: list[str] = []
 
     branches = git('branch', '--list', branch_name).decode()
@@ -66,24 +71,27 @@ def main(argv: list[str]) -> int:
         print(f'FAIL: branch {branch_name!r} is missing.')
         return 1
 
+    source_branches = git('branch', '--list', source).decode()
+    if source not in source_branches:
+        print(f'FAIL: source branch {source!r} is missing.')
+        return 1
 
-
-    # 1. The branch must carry every local change to PR paths.
-    drift = git('diff', '--stat', 'master', branch_name, '--', *PR_PATHS)
+    # 1. The branch must carry every change the working branch made to PR paths.
+    drift = git('diff', '--stat', source, branch_name, '--', *PR_PATHS)
     if drift.strip():
         problems.append(
-            f'{branch_name} is behind master on PR paths; rebuild it:\n'
+            f'{branch_name} is behind {source} on PR paths; rebuild it:\n'
             + drift.decode('utf-8', 'replace').rstrip()
         )
 
-    # 2. main/master must not touch PR paths in ways the branch lacks.
-    only_master = git(
-        'diff', '--name-only', branch_name, 'master', '--', *PR_PATHS
+    # 2. The working branch must not touch PR paths in ways the branch lacks.
+    only_source = git(
+        'diff', '--name-only', branch_name, source, '--', *PR_PATHS
     )
-    if only_master.strip():
+    if only_source.strip():
         problems.append(
-            'master has PR-path changes missing from the branch:\n  '
-            + '\n  '.join(only_master.decode().split())
+            f'{source} has PR-path changes missing from the branch:\n  '
+            + '\n  '.join(only_source.decode().split())
         )
 
     # 3. full.diff must be byte-identical to the current series.
@@ -143,7 +151,7 @@ def main(argv: list[str]) -> int:
 
     print(
         f'OK: {len(commits)} commit(s), {len(patches)} patch(es), '
-        f'full.diff matches, {branch_name} == master on '
+        f'full.diff matches, {branch_name} == {source} on '
         f'{", ".join(PR_PATHS)}'
     )
     return 0
