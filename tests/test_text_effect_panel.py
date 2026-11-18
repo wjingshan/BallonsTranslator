@@ -108,6 +108,10 @@ class _PanelCanvas:
         self.stack = QUndoStack()
         self.selected = []
         self.gv = QWidget()
+        # The panel cancels the bubble drag session when the owner changes.
+        self.txtblkShapeControl = SimpleNamespace(
+            bubble_control=SimpleNamespace(cancel_drag=lambda: None),
+        )
 
     def push_undo_command(self, command) -> None:
         self.stack.push(command)

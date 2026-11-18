@@ -11,9 +11,11 @@ import warnings
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
+from qtpy.QtCore import QRectF
 from qtpy.QtWidgets import QApplication
 
 from ballontranslator.ui.text_engine.item import TextBlkItem
+from ballontranslator.ui.text_engine.rendering.glyph import glyph_geometry
 from ballontranslator.ui.text_engine.vertical_layout import (
     VerticalTextDocumentLayout,
 )
@@ -51,6 +53,27 @@ class RomanWordRotationLayoutTest(unittest.TestCase):
         block.fontformat.standard_vertical_roman_alignment = standard_roman
         block.fontformat.roman_word_rotation = word_rotation
         return TextBlkItem(block, 0)
+
+    @staticmethod
+    def _ink(item: TextBlkItem):
+        """Union of every settled glyph's paint bounds."""
+        bounds = QRectF()
+        block = item.document().firstBlock()
+        while block.isValid():
+            layout = block.layout()
+            for index in range(layout.lineCount()):
+                placement = item.layout.vertical_line_placement(block, index)
+                if placement is None:
+                    continue
+                line, offset, orientation = placement
+                ink = glyph_geometry(
+                    line, line.textStart(), line.textLength(),
+                    offset, orientation, 0.,
+                ).bounds
+                if not ink.isEmpty():
+                    bounds = ink if bounds.isNull() else bounds.united(ink)
+            block = block.next()
+        return bounds
 
     @staticmethod
     def _advances(item: TextBlkItem) -> dict:
@@ -189,7 +212,14 @@ class RomanWordRotationLayoutTest(unittest.TestCase):
         ]
         self.assertGreater(min(lines), 1.0)
         slack = max(0.0, layout.available_height - layout.shrink_height)
-        self.assertAlmostEqual(min(lines), slack / 2, delta=0.5)
+        self.assertGreater(slack, 1.0)
+        # Columns settle by glyph ink, so compare the ink centre rather than
+        # the line box that carries a font ascent above the ink.
+        self.assertAlmostEqual(
+            self._ink(item).center().y(),
+            layout.effectPadding() + layout.available_height / 2,
+            delta=1.0,
+        )
         for letter in 'Master':
             self.assertTrue(layout.needs_vertical_rotation(letter))
 

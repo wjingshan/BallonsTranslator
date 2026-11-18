@@ -577,12 +577,13 @@ class ProgramConfig(Config):
                     if module_cfg['translate_by_textblock']
                     else TranslateContext.Page
                 )
-            if module_cfg.get('textdetector') == 'rtdetr_v2':
-                module_cfg['textdetector'] = 'ctbd'
+            if module_cfg.get('textdetector') in {'rtdetr_v2', 'ctbd'}:
+                # The RT-DETR based CTBD detector is retired; CTD is current.
+                module_cfg['textdetector'] = 'ctd'
             if 'textdetector_params' in module_cfg:
                 params = module_cfg['textdetector_params']
-                if 'rtdetr_v2' in params:
-                    params['ctbd'] = params.pop('rtdetr_v2')
+                for retired in ('rtdetr_v2', 'ctbd'):
+                    params.pop(retired, None)
 
         effect_notices = set()
         if 'global_fontformat' in config_dict:

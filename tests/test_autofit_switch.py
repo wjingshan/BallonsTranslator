@@ -9,7 +9,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 from qtpy.QtWidgets import QApplication
 
-from ballontranslator.ui.text_engine.editing.manager import SceneTextManager
+from ballontranslator.ui.text_engine.bubble_layout import fit_text_in_shape
 from ballontranslator.ui.text_engine.formatting.commands import (
     mark_manual_font_size,
 )
@@ -18,7 +18,8 @@ from ballontranslator.ui.text_engine.vertical_fit import (
     fit_vertical_font_size,
 )
 from ballontranslator.utils import config as C
-from ballontranslator.utils.fontformat import TextAlignment
+from ballontranslator.utils.bubble_shape import BubbleShape
+from ballontranslator.utils.fontformat import FontFormat, TextAlignment
 from ballontranslator.utils.textblock import TEXT_LAYOUT_VERSION, TextBlock
 
 
@@ -34,18 +35,19 @@ def make_item(text, bounds, font_size) -> TextBlkItem:
     return TextBlkItem(block, 0)
 
 
-def populate(blocks):
-    """Run the real page-load method against a minimal host."""
-    host = SimpleNamespace(
-        formatpanel=SimpleNamespace(
-            familybox=SimpleNamespace(currentText=lambda: ''),
+def make_bubble_item(text, font_size) -> TextBlkItem:
+    """A koharu bubble block, the shape upstream's auto-fit works on."""
+    shape = BubbleShape.rectangle((0, 0, 200, 300))
+    block = TextBlock(
+        [0, 0, 200, 300], _bounding_rect=[0, 0, 200, 300],
+        translation=text, det_model='koharu',
+        bubble_shape=shape, bubble_layout=True,
+        fontformat=FontFormat(
+            font_family='Arial', font_size=font_size, vertical=True, alignment=1,
         ),
-        addTextBlock=lambda blk: TextBlkItem(blk, 0),
-        auto_textlayout_flag=False,
-        imgtrans_proj=SimpleNamespace(current_block_list=lambda: blocks),
+        text_layout_version=TEXT_LAYOUT_VERSION,
     )
-    SceneTextManager.populateSceneTextitems(host)
-    return host
+    return TextBlkItem(block, 0)
 
 
 
@@ -75,20 +77,25 @@ class AutofitSwitchTest(unittest.TestCase):
                 fit_vertical_font_size(item)
         self.assertGreater(item.fontformat.font_size, before)
 
-    def test_manual_size_is_not_refit_when_the_page_reloads(self) -> None:
-        """A size the user set by hand has to survive the next page load.
+    def test_manual_size_is_not_refit_by_the_bubble_auto_fit(self) -> None:
+        """A size the user set by hand has to survive the next fit.
 
-        The grow-only fit runs on every populateSceneTextitems; without the
-        mark it lifts a shrunk block back into whatever room the frame has.
+        The grow-only fit used to run inside populateSceneTextitems; the
+        merged build hands auto-fit to upstream's ``fit_text_in_shape``, so
+        the mark is what has to stop it lifting a hand-picked size back into
+        whatever room the frame has.
         """
-        manual = make_item('短い', (0, 0, 200, 400), 20)
+        manual = make_bubble_item('短い', 30)
         mark_manual_font_size(manual)
-        other = make_item('短い', (0, 0, 200, 400), 20)
-        with patch.object(C.pcfg, 'vertical_font_autofit_enabled', True), \
-                patch.object(C.pcfg, 'let_fntsize_flag', 0):
-            populate([manual.blk, other.blk])
-        self.assertEqual(manual.blk.fontformat.font_size, 20)
-        self.assertGreater(other.blk.fontformat.font_size, 20)
+        other = make_bubble_item('短い', 30)
+        self.addCleanup(manual.deleteLater)
+        self.addCleanup(other.deleteLater)
+        self.assertAlmostEqual(
+            fit_text_in_shape(manual, auto_size=True).font_size, 30., places=3
+        )
+        self.assertGreater(
+            fit_text_in_shape(other, auto_size=True).font_size, 30.
+        )
 
     def test_manual_size_mark_is_part_of_the_block_payload(self) -> None:
         """The mark has to reach the project file, not just the live item."""

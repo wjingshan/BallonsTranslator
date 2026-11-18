@@ -99,7 +99,7 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
         True
         """
         cached = self._plain_line_cache.get(block.blockNumber())
-        if cached is None or self.render_delegate is not None:
+        if cached is None or self.render_delegate is not None or self.flow_profile is not None:
             return False
         layout = block.layout()
         if (
@@ -897,32 +897,39 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
             self._plain_line_cache.clear()
             self._plain_line_context = context
         doc_margin = self._effect_padding
-        self.text_padding = 0
-        self.shrink_height = 0
-        self.shrink_width = 0
-        self._space_rows = []
-        self._relocated_spaces = []
-        self._space_caret_rects = {}
-        self._ruby_metrics = []
-        self._annotation_ink_bounds = QRectF()
-        self._last_row_advance = None
-        block = doc.firstBlock()
-        while block.isValid():
-            self.layoutBlock(block)
-            block = block.next()
+        for _ in self.flow_layout_passes():
+            self.text_padding = 0
+            self.shrink_height = 0
+            self.shrink_width = 0
+            self._space_rows = []
+            self._relocated_spaces = []
+            self._space_caret_rects = {}
+            self._ruby_metrics = []
+            self._annotation_ink_bounds = QRectF()
+            self._last_row_advance = None
+            block = doc.firstBlock()
+            while block.isValid():
+                self.layoutBlock(block)
+                block = block.next()
 
         if len(self.y_offset_lst) > 0:
             new_height = self.shrink_height
         else:
             new_height = doc_margin
-        if new_height > self.available_height:
+        if new_height > self.available_height and self.flow_profile is None:
             self.max_height = new_height + doc_margin * 2
             self.available_height = new_height
             self._emit_size_enlarged()
 
         # Settle the vertical anchor last: wrapping must depend on the content
         # height, never on where the settled block is placed in the box.
-        anchor_shift = self.vertical_anchor_shift(new_height - doc_margin)
+        # Inside a bubble the upstream flow slots already own the vertical
+        # placement of every line, so translating them again would move the
+        # ink out of the shape (see v1.5.22 bubble layout).
+        anchor_shift = (
+            0. if self.flow_profile is not None
+            else self.vertical_anchor_shift(new_height - doc_margin)
+        )
         if abs(anchor_shift) > 1e-9:
             self.translate_lines_y(anchor_shift)
             self._translate_space_rows_y(anchor_shift)
@@ -1019,13 +1026,9 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
         self._ruby_metrics.append(ruby_metrics)
 
         option = doc.defaultTextOption()
-        # maybe an option for it
-        if getattr(self.fontformat, 'no_forced_wrap', False):
-            option.setWrapMode(QTextOption.WrapMode.NoWrap)
-        else:
-            option.setWrapMode(
-                QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere
-            )
+        option.setWrapMode(
+            QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere
+        )
         tl.setTextOption(option)
         font = block.charFormat().font()
 
@@ -1080,7 +1083,25 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
                 )
             ):
                 shared_space_row = None
-                line.setLineWidth(self.available_width)
+                width = max(self.flow_rect(self.flow_line).width(), 1.) if self.flow_profile else self.available_width
+                line.setLineWidth(width)
+                if self.flow_breaks and self.flow_line < len(self.flow_breaks):
+                    end = self.flow_breaks[self.flow_line] - block.position()
+                    if line.textStart() < end <= block_text_length:
+                        length = end - line.textStart()
+                        columns = len(_grapheme_ranges(_utf16_slice(block_text, line.textStart(), length)))
+                        low, high = 1, length
+                        # Qt columns are shaped clusters, not UTF-16 offsets.
+                        while low <= high:
+                            line.setNumColumns(columns, width)
+                            actual_end = line.textStart() + line.textLength()
+                            if actual_end == end:
+                                break
+                            if actual_end < end:
+                                low = columns + 1
+                            else:
+                                high = columns - 1
+                            columns = (low + high) // 2
             protect_horizontal_ruby_wrap(block, line, ruby_metrics)
             self._settle_horizontal_ruby_wrap(
                 block, line, ruby_metrics, block_text
@@ -1089,7 +1110,11 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
 
             dy = 0
             idea_height = -1
-            if nchar > 0:
+            if self.flow_ink is not None:
+                # Use the same actual-text ink band for contour planning and placement.
+                idea_height = self.flow_ink.height()
+                dy = -self.flow_ink.top() - line.ascent()
+            elif nchar > 0:
                 tgt_cfmt = self.largest_font_format(
                     blk_no, char_idx, char_idx + nchar
                 )
@@ -1124,7 +1149,16 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
                 else y_offset
             )
             line_y_offset += over_margin
-            line.setPosition(QPointF(doc_margin, line_y_offset + dy))
+            line_x_offset = doc_margin
+            if self.flow_profile is not None:
+                slot = self.flow_rect(self.flow_line)
+                line_x_offset += slot.left()
+                line_y_offset = doc_margin + slot.top() + over_margin
+                if line.naturalTextWidth() > slot.width() + .1 or idea_height + over_margin + under_margin > slot.height() + .1:
+                    self.flow_overflow = True
+                self.flow_line += 1
+                self.flow_actual_ends.append(block.position() + line.textStart() + line.textLength())
+            line.setPosition(QPointF(line_x_offset, line_y_offset + dy))
             relocated_start, relocated_spaces = self._trailing_space_layout(
                 block, line, block_text
             )
@@ -1208,7 +1242,7 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
         self._last_row_advance = last_row_advance
         self.shrink_width = max(shrink_width, self.shrink_width)
         if (
-            self.render_delegate is None and block_text
+            self.render_delegate is None and self.flow_profile is None and block_text
             and not block_text[-1].isspace()
             and tl.lineCount() == 1 and not tl.preeditAreaText()
             and not tl.formats() and not ruby_metrics

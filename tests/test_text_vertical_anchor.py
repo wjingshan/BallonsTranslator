@@ -11,10 +11,11 @@ import warnings
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from qtpy.QtCore import QPointF, Qt
+from qtpy.QtCore import QPointF, QRectF, Qt
 from qtpy.QtWidgets import QApplication
 
 from ballontranslator.ui.text_engine.item import TextBlkItem
+from ballontranslator.ui.text_engine.rendering.glyph import glyph_geometry
 from ballontranslator.ui.text_engine.vertical_layout import (
     VerticalTextDocumentLayout,
 )
@@ -89,6 +90,27 @@ class VerticalAnchorLayoutTest(unittest.TestCase):
             return slack
         return 0.0
 
+    @staticmethod
+    def _ink(item: TextBlkItem):
+        """Union of every settled glyph's paint bounds."""
+        bounds = QRectF()
+        block = item.document().firstBlock()
+        while block.isValid():
+            layout = block.layout()
+            for index in range(layout.lineCount()):
+                placement = item.layout.vertical_line_placement(block, index)
+                if placement is None:
+                    continue
+                line, offset, orientation = placement
+                ink = glyph_geometry(
+                    line, line.textStart(), line.textLength(),
+                    offset, orientation, 0.,
+                ).bounds
+                if not ink.isEmpty():
+                    bounds = ink if bounds.isNull() else bounds.united(ink)
+            block = block.next()
+        return bounds
+
     def _assert_shift(self, item, anchor, label: str) -> None:
         lines = self._lines(item)
         self.assertTrue(lines, f'{label}: no settled lines')
@@ -96,6 +118,22 @@ class VerticalAnchorLayoutTest(unittest.TestCase):
         self.assertGreater(
             expected, 1.0, f'{label}: the case needs free space to be meaningful'
         )
+        if isinstance(item.layout, VerticalTextDocumentLayout):
+            # Columns settle by their glyph ink (upstream slot pass), so the
+            # ink edges -- not the line boxes -- are what land on the anchor.
+            layout = item.layout
+            padding = layout.effectPadding()
+            ink = self._ink(item)
+            if anchor is TextVerticalAlignment.Bottom:
+                target, actual = padding + layout.available_height, ink.bottom()
+            else:
+                target = padding + layout.available_height / 2
+                actual = ink.center().y()
+            self.assertAlmostEqual(
+                actual, target, delta=1.0,
+                msg=f'{label}: ink {actual} != {target}',
+            )
+            return
         self.assertAlmostEqual(
             lines[0][0], expected, delta=TOLERANCE,
             msg=f'{label}: first line y {lines[0][0]} != {expected}',
@@ -157,6 +195,14 @@ class VerticalAnchorLayoutTest(unittest.TestCase):
                     vertical=vertical, anchor=TextVerticalAlignment.Bottom
                 )
                 layout = item.layout
+                if isinstance(layout, VerticalTextDocumentLayout):
+                    # Vertical anchoring settles the glyph ink on the bottom.
+                    self.assertAlmostEqual(
+                        self._ink(item).bottom(),
+                        layout.effectPadding() + layout.available_height,
+                        delta=1.0,
+                    )
+                    continue
                 lines = self._lines(item)
                 last = max(lines, key=lambda entry: entry[0])
                 line = item.document().firstBlock().layout().lineAt(0)
@@ -365,3 +411,4 @@ class VerticalAlignmentCommandTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

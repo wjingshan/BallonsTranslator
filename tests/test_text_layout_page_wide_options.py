@@ -96,6 +96,11 @@ class _PanelShim:
     def update_text_style_label(self) -> None:
         self.labels_updated += 1
 
+    def resolve_text_transform_edits_for_history_change(self) -> None:
+        """The real panel cancels its drag sessions before a change lands."""
+        self.line_spacing_drag.cancel()
+        self.letter_spacing_drag.cancel()
+
 
 class PageWideOptionTest(unittest.TestCase):
 

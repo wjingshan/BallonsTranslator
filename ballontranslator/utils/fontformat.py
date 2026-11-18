@@ -432,15 +432,16 @@ class TextAlignment(enum.IntEnum):
     Right = 2
 
 
-class TextVerticalAlignment(enum.IntEnum):
+class VerticalAlignment(enum.IntEnum):
     """Placement of settled text along the logical rectangle's height.
 
-    Auto preserves the historical writing-mode rule: horizontal blocks are
-    centred vertically only while their horizontal alignment is centred, and
-    vertical blocks stay top-anchored. Older projects therefore keep their
-    current placement instead of shifting on upgrade.
+    ``Auto`` (the default and the value older projects carry) preserves the
+    historical writing-mode rule: horizontal blocks are centred vertically
+    only while their horizontal alignment is centred, and vertical blocks
+    stay top-anchored. ``Top``/``Center``/``Bottom`` are the explicit
+    placements introduced upstream, so both spellings resolve to one enum.
 
-    >>> int(TextVerticalAlignment.Auto), int(TextVerticalAlignment.Bottom)
+    >>> int(VerticalAlignment.Auto), int(VerticalAlignment.Bottom)
     (-1, 2)
     """
 
@@ -448,6 +449,20 @@ class TextVerticalAlignment(enum.IntEnum):
     Top = 0
     Center = 1
     Bottom = 2
+
+
+# Local spelling kept as an alias: both names are the same single enum.
+TextVerticalAlignment = VerticalAlignment
+
+
+def coerce_vertical_alignment(value: object) -> VerticalAlignment:
+    """Accept Auto (-1) plus the upstream Top (0)/Center (1)/Bottom (2)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            'vertical alignment requires Auto (-1), Top (0), Center (1), '
+            'or Bottom (2)'
+        )
+    return VerticalAlignment(value)
 
 
 _QT5_TO_FONT_WEIGHT = {
@@ -727,16 +742,13 @@ class FontFormat(Config):
     underline: bool = False
     italic: bool = False
     alignment: int = 0
-    vertical_alignment: int = TextVerticalAlignment.Auto
+    vertical_alignment: VerticalAlignment = VerticalAlignment.Auto
     vertical: bool = False
     standard_vertical_roman_alignment: bool = True
     # Rotates Roman letters as one compact run in vertical layout instead of
     # standing each letter upright in its own full character cell. Horizontal
     # writing mode ignores it.
     roman_word_rotation: bool = False
-    # Let the text run past its frame instead of wrapping at
-    # the frame edge; the quick-action button toggles this.
-    no_forced_wrap: bool = False
     # None is constructor-only so legacy payloads can distinguish an omitted
     # weight from an explicitly saved Normal value. __post_init__ canonicalizes
     # every live instance to FontWeight.
@@ -795,6 +807,8 @@ class FontFormat(Config):
 
     def __setattr__(self, name: str, value: object) -> None:
         data = object.__getattribute__(self, '__dict__')
+        if name == 'vertical_alignment' and name in data:
+            value = coerce_vertical_alignment(value)
         stack = data.get('text_effects')
         if name == 'text_effects' and 'text_effects' in data:
             if not isinstance(value, TextEffectStack):
@@ -881,13 +895,15 @@ class FontFormat(Config):
             self.roman_word_rotation = False
 
         try:
-            vertical_alignment = TextVerticalAlignment(self.vertical_alignment)
+            vertical_alignment = coerce_vertical_alignment(
+                self.vertical_alignment
+            )
         except (TypeError, ValueError):
             LOGGER.warning(
                 'Ignoring invalid vertical alignment value (%r); using auto.',
                 self.vertical_alignment,
             )
-            vertical_alignment = TextVerticalAlignment.Auto
+            vertical_alignment = VerticalAlignment.Auto
         self.vertical_alignment = vertical_alignment
 
         for name in (
