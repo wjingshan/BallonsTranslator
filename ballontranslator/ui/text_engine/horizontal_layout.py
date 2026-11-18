@@ -1026,9 +1026,13 @@ class HorizontalTextDocumentLayout(SceneTextLayout):
         self._ruby_metrics.append(ruby_metrics)
 
         option = doc.defaultTextOption()
-        option.setWrapMode(
-            QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere
-        )
+        if getattr(self.fontformat, 'no_forced_wrap', False):
+            # The text is allowed to leave the frame.
+            option.setWrapMode(QTextOption.WrapMode.NoWrap)
+        else:
+            option.setWrapMode(
+                QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere
+            )
         tl.setTextOption(option)
         font = block.charFormat().font()
 

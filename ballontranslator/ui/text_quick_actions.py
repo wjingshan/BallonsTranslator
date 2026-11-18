@@ -1,16 +1,16 @@
-"""Quick action beside a selected text block: scale text and its frame.
+"""Quick actions beside a selected text block: scale text and free wrapping.
 
-One small ``T`` button floats at the right edge of the active block. Dragging
-it changes the font size (down grows, up shrinks, Shift applies to every block
-on the page). Free wrapping is no longer a quick action: upstream's bubble
-constraint owns how text fills its box.
+Two small buttons float at the right edge of the active block. Dragging the
+``T`` handle changes the font size (down grows, up shrinks, Shift applies to
+every block on the page); the second button lets the text ignore its box so it
+wraps naturally instead of being forced at the frame edge.
 """
 
 from __future__ import annotations
 
 from typing import Callable, List
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QPoint, QPointF, Qt
 from qtpy.QtWidgets import QToolButton, QWidget
 
 BUTTON_SIZE = 30
@@ -55,6 +55,70 @@ def scaled_font_size(base: float, progress: float) -> float:
     return max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, size))
 
 
+def hug_content(item) -> bool:
+    """Shrink the frame onto the text, keeping the frame centre.
+
+    Free wrapping produces a single tall column, so an unchanged frame would
+    stay as wide as the balloon while the text sits in the middle of it.
+
+    >>> callable(hug_content)
+    True
+    """
+    try:
+        centre = item.mapToScene(item.boundingRect().center())
+        item.squeezeBoundingRect()
+        item.layout.reLayoutEverything()
+        current = item.mapToScene(item.boundingRect().center())
+        item.setPos(item.pos() + (centre - current))
+        return True
+    except (RuntimeError, AttributeError, TypeError):
+        return False
+
+
+def restore_original_rect(item) -> bool:
+    """Put the frame captured before free wrapping back.
+
+    A block that was already free-wrapped when the page loaded has no captured
+    rect, so it falls back to fitting its content.
+
+    >>> callable(restore_original_rect)
+    True
+    """
+    rect = getattr(item, 'free_wrap_original_rect', None)
+    if rect is None:
+        stored = getattr(getattr(item, 'blk', None),
+                         'pre_free_wrap_rect', None)
+        if stored and len(stored) == 4:
+            rect = (
+                stored[0], stored[1], (stored[2], stored[3])
+            )
+    if rect is None:
+        # No capture (the block was already free when the page loaded): the
+        # detected text region is the only known original geometry.
+        bbox = getattr(getattr(item, 'blk', None), 'xyxy', None)
+        try:
+            x0, y0, x1, y1 = (float(value) for value in bbox)
+        except (TypeError, ValueError):
+            x0 = x1 = 0.0
+        if x1 > x0 and y1 > y0:
+            rect = (
+                x1 - x0, y1 - y0,
+                ((x0 + x1) / 2.0, (y0 + y1) / 2.0),
+            )
+    try:
+        if rect is None:
+            return hug_content(item)
+        width, height, centre_xy = rect
+        item.set_size(width, height, set_layout_maxsize=True)
+        item.layout.reLayoutEverything()
+        centre = QPointF(float(centre_xy[0]), float(centre_xy[1]))
+        current = item.mapToScene(item.boundingRect().center())
+        item.setPos(item.pos() + (centre - current))
+        return True
+    except (RuntimeError, AttributeError, TypeError):
+        return False
+
+
 class _ScaleHandle(QToolButton):
     """The ``T`` button: press, drag vertically, release."""
 
@@ -84,8 +148,18 @@ class _ScaleHandle(QToolButton):
         event.accept()
 
 
+class _WrapHandle(QToolButton):
+    """The free-wrapping button: one click toggles the block's mode."""
+
+    def __init__(self, actions: 'TextQuickActions', parent: QWidget) -> None:
+        super().__init__(parent)
+        self.actions = actions
+        self.setText('\u21b5')
+        self.setToolTip('点击：文字不受文字框限制（按住 Shift：整页）')
+
+
 class TextQuickActions:
-    """Own the scale button and apply its drag gesture."""
+    """Own the two buttons and apply their gestures."""
 
     STYLE = (
         'QToolButton { border: 1px solid #8a8f99; border-radius: %dpx;'
@@ -108,11 +182,16 @@ class TextQuickActions:
 
         self.scale_button = _ScaleHandle(self, view)
         self.scale_button.setObjectName('TextScaleHandle')
-        for button in (self.scale_button,):
+        self.wrap_button = _WrapHandle(self, view)
+        self.wrap_button.setObjectName('TextWrapHandle')
+        for button in (self.scale_button, self.wrap_button):
             button.setFixedSize(BUTTON_SIZE, BUTTON_SIZE)
             button.setCursor(Qt.CursorShape.ArrowCursor)
             button.setStyleSheet(self.STYLE)
             button.setVisible(False)
+
+        self.wrap_button.setCheckable(True)
+        self.wrap_button.clicked.connect(self._on_wrap_clicked)
 
         self._base_size = 0.0
         self._last_size = 0.0
@@ -128,8 +207,9 @@ class TextQuickActions:
 
     def refresh(self) -> None:
         item = self.target
-        buttons = (self.scale_button,)
+        buttons = (self.scale_button, self.wrap_button)
         if item is None:
+            self.wrap_button.setChecked(False)
             for button in buttons:
                 button.setVisible(False)
             return
@@ -137,6 +217,13 @@ class TextQuickActions:
             if not item.isVisible():
                 raise RuntimeError
             rect = item.mapToScene(item.boundingRect()).boundingRect()
+            free = bool(getattr(item.fontformat, 'no_forced_wrap', False))
+            self.wrap_button.setChecked(free)
+            self.wrap_button.setToolTip(
+                ('已开启：文字不受文字框限制，点击恢复' if free
+                 else '已关闭：文字受文字框限制，点击开启自由换行')
+                + '（按住 Shift：整页）'
+            )
         except RuntimeError:
             for button in buttons:
                 button.setVisible(False)
@@ -145,6 +232,7 @@ class TextQuickActions:
         middle = self.view.mapFromScene(rect.center())
         x = max(0, anchor.x() + 8)
         self.scale_button.move(x, max(0, middle.y() - BUTTON_SIZE - 4))
+        self.wrap_button.move(x, max(0, middle.y() + 4))
         for button in buttons:
             button.setVisible(True)
 
@@ -290,3 +378,53 @@ class TextQuickActions:
         before = [initial[id(item)] for item in items]
         after = [self._snapshot(item) for item in items]
         push_scale_snapshot(canvas, items, before, after)
+
+    # -- wrap toggle ------------------------------------------------------
+    def _on_wrap_clicked(self) -> None:
+        items = self._items(self._shift_down())
+        if not items:
+            return
+        enabled = not bool(
+            getattr(items[0].fontformat, 'no_forced_wrap', False)
+        )
+        if enabled:
+            for item in items:
+                try:
+                    # Remember the frame the user chose, so the switch is
+                    # reversible instead of leaving a grown frame behind.
+                    rect = item.boundingRect()
+                    centre = item.mapToScene(rect.center())
+                    captured = (
+                        rect.width(), rect.height(),
+                        (centre.x(), centre.y()),
+                    )
+                    item.free_wrap_original_rect = captured
+                    # also store it in the project, so the switch can be
+                    # turned off after a reload
+                    item.blk.pre_free_wrap_rect = list(captured[:2]) + [
+                        captured[2][0], captured[2][1],
+                    ]
+                except RuntimeError:
+                    continue
+
+        from ballontranslator.ui.text_engine.formatting.commands import (
+            push_no_forced_wrap,
+        )
+
+        # Pushing onto the text undo stack is what marks the project unsaved,
+        # so the toggle survives a page switch or a restart.
+        canvas = self.view.scene() if hasattr(self.view, 'scene') else None
+        push_no_forced_wrap(canvas, items, enabled)
+
+        if enabled:
+            # The frame has to follow the text, or a one-column block keeps
+            # the balloon's original width.
+            for item in items:
+                hug_content(item)
+        else:
+            for item in items:
+                try:
+                    restore_original_rect(item)
+                except RuntimeError:
+                    continue
+        self.refresh()

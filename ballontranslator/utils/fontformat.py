@@ -749,6 +749,9 @@ class FontFormat(Config):
     # standing each letter upright in its own full character cell. Horizontal
     # writing mode ignores it.
     roman_word_rotation: bool = False
+    # Let the text leave its frame instead of wrapping inside it;
+    # the bubble constraint is skipped while this is on.
+    no_forced_wrap: bool = False
     # None is constructor-only so legacy payloads can distinguish an omitted
     # weight from an explicitly saved Normal value. __post_init__ canonicalizes
     # every live instance to FontWeight.

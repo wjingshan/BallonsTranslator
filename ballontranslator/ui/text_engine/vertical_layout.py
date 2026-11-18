@@ -789,6 +789,8 @@ class VerticalTextDocumentLayout(SceneTextLayout):
             # Roman word rotation changes the settled column advance, so a
             # cached column measured under the other value must not be reused.
             self.fontformat.roman_word_rotation,
+            # Free wrapping changes the column count the same way.
+            getattr(self.fontformat, 'no_forced_wrap', False),
             pcfg.compact_vertical_punctuation_spacing,
             option.alignment(), option.textDirection(), option.flags(),
             option.useDesignMetrics(), option.tabStopDistance(),
@@ -816,6 +818,16 @@ class VerticalTextDocumentLayout(SceneTextLayout):
             while block.isValid():
                 self.layoutBlock(block)
                 block = block.next()
+
+            if getattr(self.fontformat, 'no_forced_wrap', False):
+                # Free wrapping lets the text leave the frame, so the
+                # frame has to grow to the extent the text reached.
+                extent = 0.0
+                for offsets in self.y_offset_lst or []:
+                    for pair in offsets:
+                        extent = max(extent, float(pair[1]))
+                if extent > self.min_height:
+                    self.min_height = extent
 
         enlarged = False
         x_shift = 0
@@ -2579,7 +2591,11 @@ class VerticalTextDocumentLayout(SceneTextLayout):
                         inseparable_run_range = (run_start, run_end)
 
             available_height = self.available_height + doc_margin
-            if self.flow_profile is not None:
+            if getattr(self.fontformat, 'no_forced_wrap', False):
+                # One column that never breaks; the frame no longer
+                # constrains where the text may go.
+                available_height = max(available_height, 1.0e6)
+            elif self.flow_profile is not None:
                 available_height = doc_margin + self.flow_rect(self.flow_line).bottom()
             text_len = line.textLength()
             end_char = char_idx + text_len >= blk_text_len

@@ -892,7 +892,10 @@ class SceneTextManager(QObject):
         Koharu and explicit constraints use measured flow; other blocks retain legacy layout.
         '''
 
-        if blkitem.blk.det_model == 'koharu' or blkitem.blk.bubble_layout:
+        if (
+            blkitem.blk.det_model == 'koharu'
+            or blkitem.blk.bubble_layout
+        ) and not getattr(blkitem.blk, 'no_forced_wrap', False):
             if text is not None and text != blkitem.toPlainText():
                 blkitem.setPlainText(text)
             if not blkitem.toPlainText().strip():

@@ -1,10 +1,4 @@
-"""Quick actions: the ``T`` drag handle.
-
-Free wrapping left the quick-action bar when upstream's bubble constraint took
-over line breaking (v1.5.22 merge, decision D2). The handle only scales the
-text and its frame now; the removed wrap cases are covered by
-``tests/test_bubble_layout.py``.
-"""
+"""Quick actions: drag scaling and the no-forced-wrap switch."""
 
 import os
 import unittest
@@ -82,12 +76,6 @@ class ActionsTest(unittest.TestCase):
         self.actions = TextQuickActions(self.view, lambda: self.items)
         self.actions.set_target(self.items[0])
 
-    def test_only_the_scale_handle_survives(self) -> None:
-        """The wrap button must be gone: upstream owns free wrapping now."""
-        self.assertFalse(hasattr(self.actions, 'wrap_button'))
-        self.assertFalse(hasattr(self.actions, '_on_wrap_clicked'))
-        self.assertTrue(self.actions.scale_button.isVisibleTo(self.view))
-
     def test_drag_applies_a_scaled_size(self) -> None:
         self.actions.start_scale(100.0, 100.0)
         # up (dy negative) plus right (dx positive) spans one full drag, so
@@ -130,14 +118,56 @@ class ActionsTest(unittest.TestCase):
         self.assertAlmostEqual(after.x(), before.x(), places=1)
         self.assertAlmostEqual(after.y(), before.y(), places=1)
 
-    def test_a_finished_drag_marks_the_size_as_manual(self) -> None:
-        """D3: the auto-fit pass must not refit a hand-picked size."""
-        item = self._scaled(DRAG_SPAN * 0.5)
-        self.assertTrue(item.blk.manual_font_size)
+    def test_wrap_toggle_flips_the_flag_and_back(self) -> None:
+        self.actions._on_wrap_clicked()
+        self.assertTrue(self.items[0].fontformat.no_forced_wrap)
+        self.actions._on_wrap_clicked()
+        self.assertFalse(self.items[0].fontformat.no_forced_wrap)
 
-    def test_a_click_without_movement_stays_unmarked(self) -> None:
-        item = self._scaled(0.0)
-        self.assertFalse(item.blk.manual_font_size)
+    def test_unconstrained_vertical_block_keeps_one_column(self) -> None:
+        item = make_item('一二三四五六七八九十', (0, 0, 120, 80))
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        block = item.document().firstBlock().layout()
+        columns = {round(block.lineAt(i).x(), 1) for i in range(block.lineCount())}
+        self.assertEqual(len(columns), 1, columns)
+
+        wrapped = make_item('一二三四五六七八九十', (0, 0, 120, 80))
+        wrapped.layout.reLayoutEverything()
+        block = wrapped.document().firstBlock().layout()
+        columns = {round(block.lineAt(i).x(), 1) for i in range(block.lineCount())}
+        self.assertGreater(len(columns), 1, columns)
+
+    def test_flag_is_part_of_the_layout_cache_key(self) -> None:
+        """Turning the flag off must not reuse the free-wrapped geometry."""
+        item = make_item('一二三四五六七八九十', (0, 0, 120, 80))
+        item.layout.reLayoutEverything()
+        before = item.layout._plain_column_context
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        after = item.layout._plain_column_context
+        self.assertNotEqual(before, after)
+
+    def test_switching_off_restores_the_original_height(self) -> None:
+        item = make_item('一二三四五六七八九十', (0, 0, 120, 80))
+        original = item.boundingRect().height()
+        actions = TextQuickActions(self.view, lambda: [item])
+        actions.set_target(item)
+        actions._on_wrap_clicked()
+        grown = item.boundingRect().height()
+        self.assertGreater(grown, original)
+        actions._on_wrap_clicked()
+        self.assertAlmostEqual(
+            item.boundingRect().height(), original, places=1
+        )
+        self.assertFalse(item.fontformat.no_forced_wrap)
+
+    def test_frame_grows_to_hold_free_wrapped_text(self) -> None:
+        item = make_item('一二三四五六七八九十', (0, 0, 120, 80))
+        before = item.boundingRect().height()
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        self.assertGreater(item.boundingRect().height(), before)
 
 
 class NotifyTest(unittest.TestCase):
@@ -175,6 +205,56 @@ class NotifyTest(unittest.TestCase):
 
         control.setBlkItem(None)
         self.assertIsNone(seen[-1])
+
+
+class WrapPersistenceTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_wrap_flag_survives_serialization(self) -> None:
+        """The flag has to reach the project file, not just the live item."""
+        item = make_item('一二三', (0, 0, 120, 80))
+        item.fontformat.no_forced_wrap = True
+        serialized = item.fontformat.to_serializable_dict()
+        self.assertIn('no_forced_wrap', serialized)
+        self.assertTrue(serialized['no_forced_wrap'])
+
+    def test_toggle_pushes_onto_the_text_undo_stack(self) -> None:
+        """Saving is driven by the undo stack, so the toggle must push there.
+
+        Before this, the toggle mutated the block directly, which left the
+        stack clean: the page change then skipped writing and the change was
+        lost on the next load.
+        """
+        from ballontranslator.ui.text_engine.formatting.commands import (
+            push_no_forced_wrap,
+        )
+
+        class FakeUndoStack:
+            def __init__(self):
+                self.commands = []
+
+            def push(self, command):
+                self.commands.append(command)
+                command.redo()
+
+        class FakeCanvas:
+            def __init__(self):
+                self.stack = FakeUndoStack()
+
+            def push_text_command(self, command):
+                self.stack.push(command)
+
+        item = make_item('一二三', (0, 0, 120, 80))
+        canvas = FakeCanvas()
+        push_no_forced_wrap(canvas, [item], True)
+        self.assertTrue(item.fontformat.no_forced_wrap)
+        self.assertEqual(len(canvas.stack.commands), 1)
+
+        canvas.stack.commands[0].undo()
+        self.assertFalse(item.fontformat.no_forced_wrap)
 
 
 class ScalePersistenceTest(unittest.TestCase):
@@ -237,6 +317,112 @@ class ScalePersistenceTest(unittest.TestCase):
         with suspend_undo_commands():
             self.assertTrue(undo_suspended())
         self.assertFalse(undo_suspended())
+
+
+class FreeWrapHugTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_free_wrapping_hugs_the_frame_in_both_directions(self) -> None:
+        """A one-column block must not keep the balloon's original width."""
+        from ballontranslator.ui.text_quick_actions import (
+            hug_content,
+            restore_original_rect,
+        )
+
+        item = make_item('库尔基加尔', (0, 0, 260, 90), font_size=40)
+        item.layout.reLayoutEverything()
+        before = item.boundingRect()
+        captured = (
+            before.width(), before.height(),
+            (item.mapToScene(before.center()).x(),
+             item.mapToScene(before.center()).y()),
+        )
+
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        self.assertTrue(hug_content(item))
+        hugged = item.boundingRect()
+        self.assertLess(hugged.width(), before.width())
+        self.assertGreater(hugged.height(), 0.0)
+
+        item.free_wrap_original_rect = captured
+        item.fontformat.no_forced_wrap = False
+        item.layout.reLayoutEverything()
+        self.assertTrue(restore_original_rect(item))
+        restored = item.boundingRect()
+        self.assertAlmostEqual(restored.width(), before.width(), places=0)
+        self.assertAlmostEqual(restored.height(), before.height(), places=0)
+
+
+class StoredRectTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_stored_rect_restores_after_a_reload(self) -> None:
+        """A block that was free-wrapped when the page loaded must restore.
+
+        The live attribute does not exist after a reload, so the rect captured
+        on the block is the only way back to the original frame.
+        """
+        from ballontranslator.ui.text_quick_actions import (
+            hug_content,
+            restore_original_rect,
+        )
+
+        item = make_item('库尔基加尔', (0, 0, 220, 90), font_size=40)
+        item.layout.reLayoutEverything()
+        before = item.boundingRect()
+        centre = item.mapToScene(before.center())
+        item.blk.pre_free_wrap_rect = [
+            before.width(), before.height(), centre.x(), centre.y()
+        ]
+
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        hug_content(item)
+        self.assertLess(item.boundingRect().width(), before.width())
+
+        # simulate a reload: the live attribute is gone
+        if hasattr(item, 'free_wrap_original_rect'):
+            delattr(item, 'free_wrap_original_rect')
+        item.fontformat.no_forced_wrap = False
+        item.layout.reLayoutEverything()
+        self.assertTrue(restore_original_rect(item))
+        self.assertAlmostEqual(item.boundingRect().width(), before.width(),
+                               places=0)
+
+
+class DetectedRegionFallbackTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_missing_capture_falls_back_to_the_detected_region(self) -> None:
+        """A block freed before the rect was recorded must still recover.
+
+        The detected text region is the only original geometry such a block
+        carries, so switching the mode off restores that instead of leaving the
+        narrow single-column frame.
+        """
+        from ballontranslator.ui.text_quick_actions import restore_original_rect
+
+        item = make_item('库尔基加尔', (0, 0, 220, 90), font_size=40)
+        item.blk.xyxy = [0.0, 0.0, 300.0, 200.0]
+        item.fontformat.no_forced_wrap = True
+        item.layout.reLayoutEverything()
+        if hasattr(item, 'free_wrap_original_rect'):
+            delattr(item, 'free_wrap_original_rect')
+        item.blk.pre_free_wrap_rect = None
+
+        self.assertTrue(restore_original_rect(item))
+        self.assertAlmostEqual(item.boundingRect().width(), 300.0, places=0)
+        self.assertAlmostEqual(item.boundingRect().height(), 200.0, places=0)
 
 
 if __name__ == '__main__':

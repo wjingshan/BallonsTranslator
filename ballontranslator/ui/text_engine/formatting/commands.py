@@ -275,6 +275,53 @@ def mark_manual_font_size(blkitem) -> None:
     if blk is not None:
         blk.manual_font_size = True
 
+def _apply_no_forced_wrap_items(blkitems, values):
+    for blkitem, value in zip(blkitems, values):
+        blkitem.fontformat.no_forced_wrap = bool(value)
+        try:
+            blkitem.layout.reLayoutEverything()
+        except (RuntimeError, AttributeError):
+            continue
+
+
+def apply_no_forced_wrap(param_name: str, values, act_ffmt: FontFormat,
+                         is_global: bool, blkitems: List[TextBlkItem],
+                         **kwargs):
+    """Set the flag and relayout; used as the command's payload."""
+    with suspend_undo_commands():
+        _apply_no_forced_wrap_items(blkitems, values)
+
+
+def push_no_forced_wrap(canvas, blkitems: List[TextBlkItem],
+                        enabled: bool) -> None:
+    """Apply the toggle and register it as an undoable text change.
+
+    The project's unsaved state comes from the text undo stack, so a direct
+    mutation looked saved and a page change skipped writing it.
+
+    >>> callable(push_no_forced_wrap)
+    True
+    """
+    items = [item for item in blkitems if _is_live_item(item)]
+    if not items:
+        return
+    values = [bool(enabled)] * len(items)
+    undo_values = [bool(item.fontformat.no_forced_wrap) for item in items]
+    params = {
+        'param_name': 'no_forced_wrap',
+        'act_ffmt': items[0].fontformat,
+        'is_global': False,
+        'blkitems': items,
+    }
+    push = getattr(canvas, 'push_text_command', None)
+    if push is None:
+        apply_no_forced_wrap(values=values, **params)
+        return
+    push(TextStyleUndoCommand(
+        apply_no_forced_wrap, params, values, undo_values
+    ))
+
+
 def _apply_scale_snapshot(param_name: str, values, act_ffmt: FontFormat,
                           is_global: bool, blkitems: List[TextBlkItem],
                           **kwargs):
