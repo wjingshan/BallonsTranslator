@@ -12,14 +12,16 @@ from qtpy.QtGui import (
     QAbstractTextDocumentLayout,
     QColor,
     QImage,
+    QInputMethodEvent,
     QKeyEvent,
     QPainter,
     QTextCharFormat,
     QTextCursor,
 )
-from qtpy.QtWidgets import QApplication, QGraphicsScene
+from qtpy.QtWidgets import QApplication, QGraphicsScene, QGraphicsView
 
 from ballontranslator.ui.text_engine.item import TextBlkItem
+from ballontranslator.utils.config import pcfg
 from ballontranslator.utils.fontformat import TextTransformStack
 from ballontranslator.utils.textblock import TextBlock
 
@@ -67,6 +69,60 @@ class VerticalInteractionTest(unittest.TestCase):
         context.cursorPosition = -1
         context.selections = [selection]
         return context
+
+    def _start_editor(self, text: str) -> TextBlkItem:
+        item = self._make_item(text)
+        scene = QGraphicsScene()
+        scene.addItem(item)
+        view = QGraphicsView(scene)
+        self.addCleanup(scene.deleteLater)
+        self.addCleanup(view.close)
+        view.show()
+        view.setFocus()
+        item.startEdit()
+        self.app.processEvents()
+        self.assertTrue(item.hasFocus())
+        return item
+
+    @patch.object(pcfg, 'compact_vertical_punctuation_spacing', True)
+    def test_preedit_with_unsettled_punctuation_width_can_commit_and_undo(self) -> None:
+        # Native line lengths include preedit even though the document does not.
+        for text, start, end, preedit, committed in (
+            ('（😀', 3, 3, ' ', '（😀字'),
+            ('前\n（abcA😀', 3, 6, 'n', '前\n（字A😀'),
+        ):
+            with self.subTest(text=text):
+                item = self._start_editor(text)
+                cursor = item.textCursor()
+                cursor.setPosition(start)
+                cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+                item.setTextCursor(cursor)
+                item.inputMethodEvent(QInputMethodEvent(preedit, []))
+                self.assertEqual(
+                    item.textCursor().block().layout().preeditAreaText(), preedit
+                )
+                commit = QInputMethodEvent()
+                commit.setCommitString('字')
+                item.inputMethodEvent(commit)
+                self.assertEqual(item.toPlainText(), committed)
+                item.undo()
+                self.assertEqual(item.toPlainText(), text)
+                item.endEdit(keep_focus=False)
+
+    def test_cancelling_preedit_preserves_wrapped_vertical_frame(self) -> None:
+        item = self._start_editor('木木木A😀')
+        item.set_size(100, 60, set_layout_maxsize=True)
+        cursor = item.textCursor()
+        cursor.setPosition(1)
+        item.setTextCursor(cursor)
+        frame = item.logical_unpadded_rect()
+        item.inputMethodEvent(QInputMethodEvent('n', []))
+        self.assertEqual(cursor.block().layout().preeditAreaText(), 'n')
+        item.inputMethodEvent(QInputMethodEvent())
+        self.assertEqual(cursor.block().layout().preeditAreaText(), '')
+        self.assertEqual(item.toPlainText(), '木木木A😀')
+        self.assertEqual(item.logical_unpadded_rect(), frame)
+        item.endEdit(keep_focus=False)
 
     def test_empty_vertical_item_paints_a_visible_caret(self) -> None:
         item = self._make_item('')
@@ -425,7 +481,9 @@ class VerticalInteractionTest(unittest.TestCase):
         self.assertEqual(item.layout._selection_geometry_cache, {})
 
     def test_left_right_moves_between_vertical_columns(self):
-        probe = self._make_item('A' * 40, height=180)
+        # Katakana breaks between characters; a Latin run stays whole by design,
+        # so it cannot be used to probe the column capacity.
+        probe = self._make_item('ア' * 40, height=180)
 
         def column_positions(item: TextBlkItem) -> List[List[int]]:
             block = item.document().firstBlock()
@@ -439,7 +497,7 @@ class VerticalInteractionTest(unittest.TestCase):
             return [columns[x] for x in sorted(columns, reverse=True)]
 
         capacity = max(map(len, column_positions(probe)))
-        item = self._make_item('A' * (capacity * 3 + 1), height=180)
+        item = self._make_item('ア' * (capacity * 3 + 1), height=180)
         columns = column_positions(item)
         self.assertEqual([len(column) for column in columns], [
             capacity,
