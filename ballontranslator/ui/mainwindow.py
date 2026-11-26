@@ -346,6 +346,7 @@ class MainWindow(mainwindow_cls):
 
         self.bottomBar.originalSlider.valueChanged.connect(self.canvas.setOriginalTransparencyBySlider)
         self.bottomBar.editingLayerSlider.valueChanged.connect(self.canvas.setEditingLayerOpacityBySlider)
+        self.canvas.toggle_layer_opacity.connect(self.bottomBar.toggle_layer_opacity)
         
         self.drawingPanel = DrawingPanel(self.canvas)
         self.textPanel = TextPanel(self.app)
@@ -1288,7 +1289,7 @@ class MainWindow(mainwindow_cls):
     def shortcutSelectAll(self):
         if self.centralStackWidget.currentIndex() == 0:
             if self.textPanel.isVisible():
-                if self.canvas.txtblkShapeControl.bubble_control.handle_shortcut(
+                if self.canvas.txtblkShapeControl.handle_shortcut(
                     QKEY.Key_A, Qt.KeyboardModifier.ControlModifier,
                 ):
                     return
@@ -1306,7 +1307,7 @@ class MainWindow(mainwindow_cls):
 
     def shortcutDelete(self):
         if self.canvas.gv.isVisible():
-            if self.canvas.txtblkShapeControl.bubble_control.handle_shortcut(
+            if self.canvas.txtblkShapeControl.handle_shortcut(
                 QKEY.Key_Delete, Qt.KeyboardModifier.NoModifier,
             ):
                 return

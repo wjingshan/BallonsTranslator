@@ -15,7 +15,7 @@ try:
 except:
     from qtpy.QtGui import QUndoStack, QUndoCommand
 
-from .misc import ndarray2pixmap, QKEY, QNUMERIC_KEYS, ARROWKEY2DIRECTION
+from .misc import segment_rect_interval, ndarray2pixmap, QKEY, QNUMERIC_KEYS, ARROWKEY2DIRECTION
 from .text_engine.item import TextBlkItem, TextBlock
 from .text_quick_actions import TextQuickActions
 from .text_engine.shape_control import (
@@ -37,44 +37,6 @@ from ballontranslator.utils.proj_imgtrans import ProjImgTrans
 CANVAS_SCALE_MAX = 10.0
 CANVAS_SCALE_MIN = 0.01
 CANVAS_SCALE_SPEED = 0.1
-
-
-def _segment_rect_entry(
-    start: QPointF,
-    end: QPointF,
-    rect: QRectF,
-    padding: float = 0.0,
-) -> float:
-    """Return where a segment first enters a padded rectangle.
-
-    >>> _segment_rect_entry(
-    ...     QPointF(0, 0), QPointF(100, 0), QRectF(20, -5, 20, 10)
-    ... )
-    0.2
-    """
-    padding = max(0.0, padding)
-    rect = rect.adjusted(-padding, -padding, padding, padding)
-    dx = end.x() - start.x()
-    dy = end.y() - start.y()
-    entry = 0.0
-    exit_ = 1.0
-    for origin, delta, lower, upper in (
-        (start.x(), dx, rect.left(), rect.right()),
-        (start.y(), dy, rect.top(), rect.bottom()),
-    ):
-        if abs(delta) < 1e-9:
-            if origin < lower or origin > upper:
-                return 1.0
-            continue
-        near = (lower - origin) / delta
-        far = (upper - origin) / delta
-        if near > far:
-            near, far = far, near
-        entry = max(entry, near)
-        exit_ = min(exit_, far)
-        if entry > exit_:
-            return 1.0
-    return min(max(entry, 0.0), 1.0)
 
 
 class CustomGV(QGraphicsView):
@@ -220,6 +182,7 @@ class Canvas(QGraphicsScene):
 
     format_textblks = Signal()
     apply_text_style = Signal(int)
+    toggle_layer_opacity = Signal()
     layout_textblks = Signal()
     reset_angle = Signal()
     squeeze_blk = Signal()
@@ -518,7 +481,7 @@ class Canvas(QGraphicsScene):
         stack_index: int,
         **callbacks: Callable[..., None],
     ) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         if self._rubber_band_target == 'grid':
             self.hide_rubber_band()
@@ -540,7 +503,7 @@ class Canvas(QGraphicsScene):
         stack_index: int,
         **callbacks: Callable[..., None],
     ) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         if self._rubber_band_target == 'grid':
             self.hide_rubber_band()
@@ -566,7 +529,7 @@ class Canvas(QGraphicsScene):
             self.txtblkShapeControl.setBlkItem(selected[0])
 
     def clear_text_transform_controls(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         if self._rubber_band_target == 'grid':
             self.hide_rubber_band()
@@ -608,7 +571,7 @@ class Canvas(QGraphicsScene):
             self.refresh_text_shape_control()
 
     def render_result_img(self) -> QImage:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         self.inpaintLayer.hide()
         editing_opacities = (
@@ -625,8 +588,10 @@ class Canvas(QGraphicsScene):
             self._set_scene_scale(1.0, refresh_control=False)
 
         scene_items = self.items()
+        # Saving can hide the whole frame first. Preserve each child's own
+        # visibility so its guides reappear when the frame is shown again.
         control_visibility = {
-            item: item.isVisible()
+            item: item.isVisibleTo(item.parentItem())
             for item in scene_items
             if bool(item.data(CONTROL_ITEM_DATA_KEY))
         }
@@ -758,7 +723,7 @@ class Canvas(QGraphicsScene):
         scale_changed = self.scale_factor != s_f
         if scale_changed:
             # Scene-space gestures retain the scale from their starting frame.
-            self.txtblkShapeControl.bubble_control.cancel_drag()
+            self.txtblkShapeControl.cancelDrag()
             self.text_move_session.cancel()
             self.cancel_path_reorder()
         self.scale_factor = s_f
@@ -798,7 +763,7 @@ class Canvas(QGraphicsScene):
         self.scaleFactorLabel.startFadeAnimation()
 
     def on_selection_changed(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         self.alpha_mask_edit_session.handle_selection_changed()
         if self.txtblkShapeControl.isVisible():
@@ -847,6 +812,10 @@ class Canvas(QGraphicsScene):
         if self.editing_textblkitem is not None:
             return super().keyPressEvent(event)
         # Single-letter canvas shortcuts must remain below live text editing.
+        elif key == QKEY.Key_O and modifiers == Qt.KeyboardModifier.NoModifier and self.textEditMode():
+            self.toggle_layer_opacity.emit()
+            event.accept()
+            return
         elif (
             modifiers == Qt.KeyboardModifier.NoModifier
             and key == QKEY.Key_S
@@ -894,7 +863,7 @@ class Canvas(QGraphicsScene):
             return False
         if self.text_move_session.handle_shortcut(key, modifiers):
             return True
-        if self.txtblkShapeControl.bubble_control.handle_shortcut(key, modifiers):
+        if self.txtblkShapeControl.handle_shortcut(key, modifiers):
             return True
         control = self.active_text_transform_control()
         if (
@@ -1173,8 +1142,8 @@ class Canvas(QGraphicsScene):
         stroker.setWidth(brush_width)
         stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
         hit_area = stroker.createStroke(segment)
+        radius = brush_width / 2
         if start == end:
-            radius = brush_width / 2
             hit_area.addEllipse(start, radius, radius)
 
         candidates = []
@@ -1186,12 +1155,9 @@ class Canvas(QGraphicsScene):
         ):
             if not isinstance(item, TextBlkItem) or item in touched:
                 continue
-            entry = _segment_rect_entry(
-                start,
-                end,
-                item.sceneBoundingRect(),
-                brush_width / 2,
-            )
+            bounds = item.sceneBoundingRect().adjusted(-radius, -radius, radius, radius)
+            interval = segment_rect_interval(start, end, bounds)
+            entry = interval[0] if interval is not None else 1.0
             candidates.append((entry, item.idx, item))
 
         for _distance, _idx, item in sorted(candidates, key=lambda hit: hit[:2]):
@@ -1383,7 +1349,11 @@ class Canvas(QGraphicsScene):
             return
         bubble = self.txtblkShapeControl.bubble_control
         if btn == Qt.MouseButton.RightButton and bubble.isVisible():
-            hit = self.itemAt(event.scenePos(), self.gv.viewportTransform())
+            hit = self.mouseGrabberItem()
+            if hit is None:
+                hits = self.items(event.scenePos(), Qt.ItemSelectionMode.IntersectsItemShape,
+                                  Qt.SortOrder.DescendingOrder, self.gv.viewportTransform())
+                hit = next((item for item in hits if item.acceptedMouseButtons() & btn), None)
             if hit is bubble or (hit is not None and bubble.isAncestorOf(hit)):
                 return super().mousePressEvent(event)
         if (
@@ -1857,7 +1827,7 @@ class Canvas(QGraphicsScene):
                 self.editing_textblkitem = textitem
 
     def clear_states(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.reset_brush_line()
         self.text_move_session.cancel()
         self.hide_rubber_band()
@@ -1923,7 +1893,7 @@ class Canvas(QGraphicsScene):
         self._update_history_save_state()
 
     def push_text_command(self, command: QUndoCommand) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         if self.text_move_session.active:
             self.text_move_session.cancel()
         self.cancel_path_reorder()
@@ -1940,7 +1910,7 @@ class Canvas(QGraphicsScene):
         self.textstack_changed.emit()
 
     def redo_textedit(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         self.cancel_path_reorder()
         if self.text_undo_stack.canRedo():
@@ -1948,7 +1918,7 @@ class Canvas(QGraphicsScene):
             self.on_textstack_changed()
 
     def undo_textedit(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.text_move_session.cancel()
         self.cancel_path_reorder()
         if self.text_undo_stack.canUndo():
@@ -1956,7 +1926,7 @@ class Canvas(QGraphicsScene):
             self.on_textstack_changed()
 
     def redo(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.reset_brush_line()
         self.text_move_session.cancel()
         self.cancel_shape_fill()
@@ -1970,7 +1940,7 @@ class Canvas(QGraphicsScene):
                 self._update_history_save_state()
 
     def undo(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         self.reset_brush_line()
         self.text_move_session.cancel()
         self.cancel_shape_fill()
@@ -1990,7 +1960,7 @@ class Canvas(QGraphicsScene):
             self.update_saved_undostep()
 
     def clear_text_stack(self) -> None:
-        self.txtblkShapeControl.bubble_control.cancel_drag()
+        self.txtblkShapeControl.cancelDrag()
         unsaved = self.text_change_unsaved()
         self.text_undo_stack.clear()
         if unsaved:
